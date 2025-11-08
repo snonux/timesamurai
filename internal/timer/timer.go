@@ -65,5 +65,10 @@ func (s *State) Save() error {
 		return err
 	}
 
+	dir := filepath.Dir(stateFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
 	return os.WriteFile(stateFilePath, data, 0644)
 }
