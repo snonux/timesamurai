@@ -44,7 +44,7 @@ sudo mv timr /usr/local/bin/
 Run the installation script:
 
 ```bash
-./install-fish-integration.sh
+./install-fish-integration.fish
 ```
 
 Then update your `fish_prompt` or `fish_right_prompt` function to include the `timr_prompt` function as shown in the script output.
