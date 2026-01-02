@@ -1,11 +1,13 @@
 package live
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
+	"codeberg.org/snonux/timr/internal/ascii"
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
 )
 
@@ -26,13 +28,26 @@ type Model struct {
 	statusStyle lipgloss.Style
 	width       int
 	height      int
+	font        string // Font selection: "doom" for figlet, or ASCII font names
+	fontIndex   int    // Current index in the AllFonts slice for cycling
 }
 
-// NewModel creates a new Model.
-func NewModel() Model {
+// NewModel creates a new Model with the specified font.
+// The font parameter can be "doom" for the original figlet font,
+// or one of the ASCII font names: "mono12", "rebel", "ansi", "ansiShadow".
+func NewModel(font string) Model {
 	state, err := timrTimer.LoadState()
 	if err != nil {
 		panic(err) // Or handle more gracefully
+	}
+
+	// Find the current font index in AllFonts for cycling support
+	fontIndex := 0
+	for i, f := range ascii.AllFonts {
+		if f == font {
+			fontIndex = i
+			break
+		}
 	}
 
 	return Model{
@@ -40,6 +55,8 @@ func NewModel() Model {
 		helpStyle:   lipgloss.NewStyle().Faint(true),
 		timerStyle:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF")),
 		statusStyle: lipgloss.NewStyle().Italic(true),
+		font:        font,
+		fontIndex:   fontIndex,
 	}
 }
 
@@ -93,6 +110,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// handle error
 			}
 			return m, nil // Stop ticking
+
+		case "f":
+			// Cycle to the next font
+			m.fontIndex = (m.fontIndex + 1) % len(ascii.AllFonts)
+			m.font = ascii.AllFonts[m.fontIndex]
+			return m, nil
 		}
 	}
 
@@ -100,6 +123,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the model's state to the terminal.
+// Supports both figlet-style fonts (doom) and large ASCII art fonts (mono12, rebel, ansi, ansiShadow).
 func (m Model) View() string {
 	if m.quitting {
 		return ""
@@ -117,12 +141,27 @@ func (m Model) View() string {
 		status = "Running"
 	}
 
-	// Large timer text
-	figure := figure.NewFigure(totalElapsed.String(), "doom", true)
-	timerStr := m.timerStyle.Render(figure.String())
+	// Render timer based on selected font
+	var timerStr string
+	if m.font == "doom" {
+		// Use original figlet font
+		figure := figure.NewFigure(totalElapsed.String(), "doom", true)
+		timerStr = m.timerStyle.Render(figure.String())
+	} else {
+		// Use large ASCII art fonts
+		font := ascii.GetFont(m.font)
+		// Format time as HH:MM:SS for better ASCII display
+		hours := int(totalElapsed.Hours())
+		minutes := int(totalElapsed.Minutes()) % 60
+		seconds := int(totalElapsed.Seconds()) % 60
+		timeStr := fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+		asciiTime := ascii.RenderNumber(timeStr, font)
+		timerStr = m.timerStyle.Render(asciiTime)
+	}
 
 	statusStr := m.statusStyle.Render(status)
-	helpStr := m.helpStyle.Render("q: quit, s: start/stop, r: reset")
+	fontInfo := m.helpStyle.Render(fmt.Sprintf("Font: %s", m.font))
+	helpStr := m.helpStyle.Render("q: quit, s: start/stop, r: reset, f: change font")
 
 	// Centering
 	return lipgloss.Place(
@@ -135,6 +174,7 @@ func (m Model) View() string {
 			timerStr,
 			statusStr,
 			"", // spacer
+			fontInfo,
 			helpStr,
 		),
 	)

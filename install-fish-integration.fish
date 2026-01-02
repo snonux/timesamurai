@@ -35,10 +35,16 @@ end
 complete -c timr -n __fish_use_subcommand -a start -d \"Start the timer\"
 complete -c timr -n __fish_use_subcommand -a stop -d \"Stop the timer\"
 complete -c timr -n __fish_use_subcommand -a pause -d \"Pause the timer\"
+complete -c timr -n __fish_use_subcommand -a continue -d \"Continue the timer\"
+complete -c timr -n __fish_use_subcommand -a cont -d \"Continue the timer\"
 complete -c timr -n __fish_use_subcommand -a status -d \"Show the timer status\"
 complete -c timr -n __fish_use_subcommand -a reset -d \"Reset the timer\"
+complete -c timr -n __fish_use_subcommand -a track -d \"Save time with description\"
 complete -c timr -n __fish_use_subcommand -a live -d \"Show the live timer\"
 complete -c timr -n __fish_use_subcommand -a prompt -d \"Show the prompt status\"
+
+# Font completions for live mode
+complete -c timr -n \"__fish_seen_subcommand_from live\" -s f -l font -d \"Font style\" -a \"doom mono12 rebel ansi ansiShadow\"
 " > "$integration_file"
 
 echo "Created: $integration_file"

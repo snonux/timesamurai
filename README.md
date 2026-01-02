@@ -10,10 +10,24 @@ It has been vibe coded!
 
 ## Installation
 
-To build and install `timr`, you need to have Go installed on your system. You can then build the executable by running the following command in the project's root directory:
+To build and install `timr`, you need to have Go installed on your system. The project uses [Mage](https://magefile.org/) for building.
+
+### Using Mage (Recommended)
 
 ```bash
-go build ./...
+# Install mage if you haven't already
+go install github.com/magefile/mage@latest
+
+# Build the project
+mage build
+```
+
+### Direct Go Build
+
+Alternatively, you can build directly with Go:
+
+```bash
+go build -o timr ./cmd/timr
 ```
 
 This will create a `timr` executable in the current directory. To make it accessible from anywhere, you can move it to a directory in your system's `PATH`, such as `/usr/local/bin`:
@@ -33,7 +47,42 @@ sudo mv timr /usr/local/bin/
 *   `timr status raw`: Shows the current elapsed time in seconds, in a raw format.
 *   `timr status rawm`: Shows the current elapsed time in minutes, in a raw format.
 *   `timr reset`: Resets the timer. This will set the elapsed time to zero.
-*   `timr live`: Shows a live, full-screen timer with keyboard controls (q: quit, s: start/stop, r: reset).
+*   `timr track <description>`: Saves the current elapsed time with a description and resets the timer.
+*   `timr live [-f|--font <font>]`: Shows a live, full-screen timer with keyboard controls and optional font selection.
+*   `timr prompt`: Shows a compact status for shell prompt integration.
+
+## Live Mode
+
+The live mode provides an interactive, full-screen timer display with the following features:
+
+### Keyboard Controls
+
+*   `s`: Start/Stop the timer
+*   `r`: Reset the timer to zero
+*   `f`: Cycle through different display fonts
+*   `q` or `Ctrl+C`: Quit live mode
+
+### Font Options
+
+When you run `timr live` without specifying a font, it randomly selects from one of the available fonts. You can also specify a font explicitly:
+
+```bash
+# Random font (different each time)
+timr live
+
+# Specific fonts
+timr live -f doom        # Classic figlet style
+timr live -f mono12      # Clean monospace blocks
+timr live -f rebel       # Stylized shaded blocks
+timr live -f ansi        # Simple block numerals
+timr live -f ansiShadow  # Box-drawing characters
+```
+
+While in live mode, press `f` to cycle through all available fonts in real-time.
+
+### Font Credits
+
+The ASCII art fonts (mono12, rebel, ansi, ansiShadow) are adapted from the [pomo](https://github.com/Bahaaio/pomo) project by Bahaa El Deen Mohamed, licensed under the MIT License.
 
 ## Fish Shell Integration
 

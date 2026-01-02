@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"codeberg.org/snonux/timr/internal/ascii"
 	"codeberg.org/snonux/timr/internal/live"
 	"codeberg.org/snonux/timr/internal/timer"
 	tea "github.com/charmbracelet/bubbletea"
@@ -85,7 +88,18 @@ func runCommand(args []string) (string, error) {
 		description := strings.Join(args[2:], " ")
 		output, err = timer.TrackTime(description)
 	case "live":
-		p := tea.NewProgram(live.NewModel())
+		// Parse optional font flag
+		var font string
+		if len(args) > 2 && (args[2] == "--font" || args[2] == "-f") {
+			if len(args) > 3 {
+				font = args[3]
+			}
+		} else {
+			// Select a random font if no argument is given
+			rand.Seed(time.Now().UnixNano())
+			font = ascii.AllFonts[rand.Intn(len(ascii.AllFonts))]
+		}
+		p := tea.NewProgram(live.NewModel(font))
 		if err := p.Start(); err != nil {
 			return "", err
 		}
@@ -103,4 +117,5 @@ func runCommand(args []string) (string, error) {
 
 func printUsage() {
 	fmt.Println("Usage: timr <start|continue|stop|pause|status|reset|live|prompt|track <description>>")
+	fmt.Println("  live [-f|--font <font>]  : Show live timer with optional font (doom, mono12, rebel, ansi, ansiShadow)")
 }
