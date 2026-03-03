@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
 )
@@ -105,6 +106,28 @@ func TestWorkLoginLogoutWithTimerFlags(t *testing.T) {
 	}
 	if state.Running {
 		t.Fatal("timer should be stopped after --stop-timer")
+	}
+}
+
+func TestParseImportDateFallbackLayout(t *testing.T) {
+	parsed, err := parseImportDate("06.01.2026")
+	if err != nil {
+		t.Fatalf("parseImportDate() error = %v", err)
+	}
+
+	expected := time.Date(2026, 1, 6, 0, 0, 0, 0, time.Local)
+	if parsed.Year() != expected.Year() || parsed.Month() != expected.Month() || parsed.Day() != expected.Day() {
+		t.Fatalf("parsed date = %v, want %v", parsed, expected)
+	}
+}
+
+func TestParseImportDateIncludesUnderlyingParseError(t *testing.T) {
+	_, err := parseImportDate("not-a-date")
+	if err == nil {
+		t.Fatal("parseImportDate() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "unsupported import date") {
+		t.Fatalf("parseImportDate() error = %v, want unsupported import date context", err)
 	}
 }
 

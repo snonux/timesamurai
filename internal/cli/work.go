@@ -411,14 +411,24 @@ func activeCategories(entries []worktime.Entry) []string {
 	return active
 }
 
-func importReportFile(ctx workContext, path string) (int, error) {
+func importReportFile(ctx workContext, path string) (imported int, err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return 0, err
 	}
-	defer file.Close()
+	defer func() {
+		closeErr := file.Close()
+		if closeErr == nil {
+			return
+		}
+		wrappedCloseErr := fmt.Errorf("close import file %q: %w", path, closeErr)
+		if err == nil {
+			err = wrappedCloseErr
+			return
+		}
+		err = errors.Join(err, wrappedCloseErr)
+	}()
 
-	imported := 0
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -518,7 +528,8 @@ func parseImportDate(token string) (time.Time, error) {
 		return time.Time{}, errors.New("import date is empty")
 	}
 
-	if parsed, err := timefmt.Parse(trimmed); err == nil {
+	parsed, parseErr := timefmt.Parse(trimmed)
+	if parseErr == nil {
 		return parsed, nil
 	}
 
@@ -532,7 +543,7 @@ func parseImportDate(token string) (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("unsupported import date %q", token)
+	return time.Time{}, fmt.Errorf("unsupported import date %q: %w", token, parseErr)
 }
 
 func workDBPath(dbDir, host string) string {
