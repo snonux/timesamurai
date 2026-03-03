@@ -20,6 +20,10 @@ func Test() error {
 	return sh.RunV("go", "test", "./...")
 }
 
+func Lint() error {
+	return sh.RunV("golangci-lint", "run", "./...")
+}
+
 func Install() error {
 	return sh.RunV("go", "install", "./cmd/timr")
 }
