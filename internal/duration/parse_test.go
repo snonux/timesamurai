@@ -63,6 +63,8 @@ func TestParseInvalidDurations(t *testing.T) {
 		"   ",
 		"abc",
 		"1h30x",
+		"9223372036854775807",
+		"-9223372036854775808",
 	}
 
 	for _, input := range tests {
