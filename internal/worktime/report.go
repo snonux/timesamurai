@@ -50,6 +50,17 @@ type weekAccumulator struct {
 	values    map[string]int64
 }
 
+type reportBuildContext struct {
+	login             map[string]Entry
+	totalBuffer       int64
+	cumulativeBalance int64
+	reports           []WeekReport
+	currentDay        dayAccumulator
+	currentWeek       weekAccumulator
+	prevDayKey        string
+	prevWeekKey       string
+}
+
 // BuildReport generates weekly reports from merged worktime entries.
 func BuildReport(entries []Entry, cfg config.Config) ([]WeekReport, error) {
 	if len(entries) == 0 {
@@ -66,80 +77,91 @@ func BuildReport(entries []Entry, cfg config.Config) ([]WeekReport, error) {
 	weekendDays := stringSet(cfg.WeekendDays)
 	plusFor := stringSet(cfg.PlusFor)
 
-	login := map[string]Entry{}
-	var totalBuffer int64
-	var cumulativeBalance int64
-	var reports []WeekReport
-
-	currentDay := newDayAccumulator()
-	currentWeek := newWeekAccumulator()
-
-	prevDayKey := ""
-	prevWeekKey := ""
+	ctx := reportBuildContext{
+		login:       map[string]Entry{},
+		currentDay:  newDayAccumulator(),
+		currentWeek: newWeekAccumulator(),
+	}
 
 	for _, entry := range sorted {
-		entryDayKey := dayKey(entry.Epoch)
-		entryWeekKey := isoWeekKey(entry.Epoch)
-
-		if prevDayKey == "" {
-			prevDayKey = entryDayKey
-		}
-		if prevWeekKey == "" {
-			prevWeekKey = entryWeekKey
-			currentWeek.weekLabel = weekLabel(entry.Epoch)
-		}
-
-		if entryDayKey != prevDayKey {
-			finalizeDayIntoWeek(&currentWeek, currentDay, minusFor, weekendDays)
-			currentDay = newDayAccumulator()
-			prevDayKey = entryDayKey
-		}
-
-		if entryWeekKey != prevWeekKey {
-			weekReport := finalizeWeek(currentWeek, cfg, plusFor, minusFor, totalBuffer, &cumulativeBalance)
-			reports = append(reports, weekReport)
-			currentWeek = newWeekAccumulator()
-			currentWeek.weekLabel = weekLabel(entry.Epoch)
-			prevWeekKey = entryWeekKey
-		}
-
-		category := normalizeCategory(entry.What)
-		if currentDay.epoch == 0 {
-			currentDay.epoch = entry.Epoch
-		}
-		if _, ok := currentDay.values[category]; !ok {
-			currentDay.values[category] = 0
-		}
-
-		action := strings.ToLower(strings.TrimSpace(entry.Action))
-		switch action {
-		case actionAdd:
-			currentDay.values[category] += entry.Value
-			if _, ok := bufferFor[category]; ok {
-				totalBuffer += entry.Value
-			}
-		case actionLogin:
-			if _, ok := login[category]; ok {
-				return nil, fmt.Errorf("already logged in for %q at epoch %d", category, entry.Epoch)
-			}
-			login[category] = entry
-		case actionLogout:
-			startEntry, ok := login[category]
-			if !ok {
-				return nil, fmt.Errorf("logout without login for %q at epoch %d", category, entry.Epoch)
-			}
-			currentDay.values[category] += entry.Epoch - startEntry.Epoch
-			delete(login, category)
-		default:
-			return nil, fmt.Errorf("unknown action %q at epoch %d", entry.Action, entry.Epoch)
+		if err := processEntry(&ctx, entry, cfg, plusFor, minusFor, weekendDays, bufferFor); err != nil {
+			return nil, err
 		}
 	}
 
-	finalizeDayIntoWeek(&currentWeek, currentDay, minusFor, weekendDays)
-	weekReport := finalizeWeek(currentWeek, cfg, plusFor, minusFor, totalBuffer, &cumulativeBalance)
-	reports = append(reports, weekReport)
+	finalizeDayIntoWeek(&ctx.currentWeek, ctx.currentDay, minusFor, weekendDays)
+	weekReport := finalizeWeek(ctx.currentWeek, cfg, plusFor, minusFor, ctx.totalBuffer, &ctx.cumulativeBalance)
+	ctx.reports = append(ctx.reports, weekReport)
 
-	return reports, nil
+	return ctx.reports, nil
+}
+
+func processEntry(
+	ctx *reportBuildContext,
+	entry Entry,
+	cfg config.Config,
+	plusFor map[string]struct{},
+	minusFor map[string]struct{},
+	weekendDays map[string]struct{},
+	bufferFor map[string]struct{},
+) error {
+	entryDayKey := dayKey(entry.Epoch)
+	entryWeekKey := isoWeekKey(entry.Epoch)
+
+	if ctx.prevDayKey == "" {
+		ctx.prevDayKey = entryDayKey
+	}
+	if ctx.prevWeekKey == "" {
+		ctx.prevWeekKey = entryWeekKey
+		ctx.currentWeek.weekLabel = weekLabel(entry.Epoch)
+	}
+
+	if entryDayKey != ctx.prevDayKey {
+		finalizeDayIntoWeek(&ctx.currentWeek, ctx.currentDay, minusFor, weekendDays)
+		ctx.currentDay = newDayAccumulator()
+		ctx.prevDayKey = entryDayKey
+	}
+
+	if entryWeekKey != ctx.prevWeekKey {
+		weekReport := finalizeWeek(ctx.currentWeek, cfg, plusFor, minusFor, ctx.totalBuffer, &ctx.cumulativeBalance)
+		ctx.reports = append(ctx.reports, weekReport)
+		ctx.currentWeek = newWeekAccumulator()
+		ctx.currentWeek.weekLabel = weekLabel(entry.Epoch)
+		ctx.prevWeekKey = entryWeekKey
+	}
+
+	category := normalizeCategory(entry.What)
+	if ctx.currentDay.epoch == 0 {
+		ctx.currentDay.epoch = entry.Epoch
+	}
+	if _, ok := ctx.currentDay.values[category]; !ok {
+		ctx.currentDay.values[category] = 0
+	}
+
+	action := strings.ToLower(strings.TrimSpace(entry.Action))
+	switch action {
+	case actionAdd:
+		ctx.currentDay.values[category] += entry.Value
+		if _, ok := bufferFor[category]; ok {
+			ctx.totalBuffer += entry.Value
+		}
+	case actionLogin:
+		if _, ok := ctx.login[category]; ok {
+			return fmt.Errorf("already logged in for %q at epoch %d", category, entry.Epoch)
+		}
+		ctx.login[category] = entry
+	case actionLogout:
+		startEntry, ok := ctx.login[category]
+		if !ok {
+			return fmt.Errorf("logout without login for %q at epoch %d", category, entry.Epoch)
+		}
+		ctx.currentDay.values[category] += entry.Epoch - startEntry.Epoch
+		delete(ctx.login, category)
+	default:
+		return fmt.Errorf("unknown action %q at epoch %d", entry.Action, entry.Epoch)
+	}
+
+	return nil
 }
 
 // FormatReport renders week/day reports as text. Colors can be toggled.
