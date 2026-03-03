@@ -122,6 +122,25 @@ func TestEntriesEditFlow(t *testing.T) {
 	}
 }
 
+func TestEntriesValueEditFlow(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(3))
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if !model.editMode {
+		t.Fatal("editMode = false, want true after v")
+	}
+
+	model.input = "120"
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.editMode {
+		t.Fatal("editMode = true, want false after Enter")
+	}
+	if model.visible[0].Value != 120 {
+		t.Fatalf("edited value = %d, want 120", model.visible[0].Value)
+	}
+}
+
 func TestEntriesDeleteWithConfirmation(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(3))
 	model.SetSize(120, 12)
@@ -168,6 +187,45 @@ func TestEntriesInsertWithOAndShiftO(t *testing.T) {
 	}
 }
 
+func TestEntriesDeletePersistsToDB(t *testing.T) {
+	dbDir := t.TempDir()
+	host := "host-a"
+
+	db := worktime.Database{
+		Entries: map[string][]worktime.Entry{
+			host: sampleEntries(3),
+		},
+	}
+	if err := worktime.SaveHost(dbDir, host, db); err != nil {
+		t.Fatalf("SaveHost() error = %v", err)
+	}
+
+	entries, err := worktime.LoadAll(dbDir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+
+	model := NewEntriesModel(entries)
+	model.SetPersistence(dbDir)
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if len(model.visible) != 2 {
+		t.Fatalf("entries len = %d, want 2 after persisted delete", len(model.visible))
+	}
+
+	reloaded, err := worktime.LoadHost(dbDir, host)
+	if err != nil {
+		t.Fatalf("LoadHost() error = %v", err)
+	}
+	if len(reloaded.Entries[host]) != 2 {
+		t.Fatalf("host entries len = %d, want 2", len(reloaded.Entries[host]))
+	}
+}
+
 func sampleEntries(count int) []worktime.Entry {
 	entries := make([]worktime.Entry, 0, count)
 	for idx := 0; idx < count; idx++ {
@@ -175,6 +233,8 @@ func sampleEntries(count int) []worktime.Entry {
 			Action: "add",
 			What:   "work",
 			Epoch:  int64(1000 + idx),
+			Source: "host-a",
+			Human:  time.Unix(int64(1000+idx), 0).Format("Mon 02.01.2006 15:04:05"),
 			Descr:  fmt.Sprintf("entry-%d", idx),
 			Value:  int64(time.Hour / time.Second),
 		})

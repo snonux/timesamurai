@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +23,51 @@ type Entry struct {
 	Human  string `json:"human"`
 	Value  int64  `json:"value,omitempty"`
 	Descr  string `json:"descr,omitempty"`
+}
+
+// UnmarshalJSON supports legacy value encodings where "value" can be int or float.
+func (e *Entry) UnmarshalJSON(data []byte) error {
+	type entryAlias Entry
+	aux := struct {
+		entryAlias
+		Value json.RawMessage `json:"value"`
+	}{}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	*e = Entry(aux.entryAlias)
+	e.Value = 0
+
+	raw := strings.TrimSpace(string(aux.Value))
+	if raw == "" || raw == "null" {
+		return nil
+	}
+
+	var intValue int64
+	if err := json.Unmarshal(aux.Value, &intValue); err == nil {
+		e.Value = intValue
+		return nil
+	}
+
+	var floatValue float64
+	if err := json.Unmarshal(aux.Value, &floatValue); err == nil {
+		e.Value = int64(math.Round(floatValue))
+		return nil
+	}
+
+	var stringValue string
+	if err := json.Unmarshal(aux.Value, &stringValue); err == nil {
+		parsed, parseErr := strconv.ParseFloat(strings.TrimSpace(stringValue), 64)
+		if parseErr != nil {
+			return fmt.Errorf("parse string value %q: %w", stringValue, parseErr)
+		}
+		e.Value = int64(math.Round(parsed))
+		return nil
+	}
+
+	return fmt.Errorf("unsupported value encoding %s", raw)
 }
 
 // Database is the on-disk JSON structure used by worktime.
@@ -45,7 +92,12 @@ func LoadAll(dbDir string) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, hostEntries := range db.Entries {
+		for host, hostEntries := range db.Entries {
+			for idx := range hostEntries {
+				if strings.TrimSpace(hostEntries[idx].Source) == "" {
+					hostEntries[idx].Source = host
+				}
+			}
 			entries = append(entries, hostEntries...)
 		}
 	}
@@ -75,6 +127,11 @@ func LoadHost(dbDir, hostname string) (Database, error) {
 
 	if _, ok := db.Entries[host]; !ok {
 		db.Entries[host] = []Entry{}
+	}
+	for idx := range db.Entries[host] {
+		if strings.TrimSpace(db.Entries[host][idx].Source) == "" {
+			db.Entries[host][idx].Source = host
+		}
 	}
 	sortEntries(db.Entries[host])
 	return db, nil

@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"codeberg.org/snonux/timr/internal/config"
+	"codeberg.org/snonux/timr/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -29,18 +31,59 @@ type Model struct {
 	pendingZ bool
 
 	styles Styles
+
+	entries EntriesModel
+	report  ReportModel
+	timer   TimerModel
+
+	entriesErr string
+	reportErr  string
 }
 
 // NewModel creates a new root TUI model.
 func NewModel() Model {
-	return Model{
+	model, _ := NewModelWithConfig(config.Default())
+	return model
+}
+
+// NewModelWithConfig creates a data-backed root model from config.
+func NewModelWithConfig(cfg config.Config) (Model, error) {
+	model := Model{
 		activeTab: tabEntries,
 		styles:    DefaultStyles(),
+		entries:   NewEntriesModel(nil),
+		report:    NewReportModel(nil),
 	}
+
+	entries, err := worktime.LoadAll(cfg.WorktimeDBDir)
+	if err != nil {
+		model.entriesErr = err.Error()
+	} else {
+		model.entries.SetEntries(entries)
+		model.entries.SetPersistence(cfg.WorktimeDBDir)
+		weeks, reportErr := worktime.BuildReport(entries, cfg)
+		if reportErr != nil {
+			model.reportErr = reportErr.Error()
+		} else {
+			model.report.SetWeeks(weeks)
+		}
+	}
+
+	timerModel, timerErr := NewTimerModel("doom", cfg)
+	if timerErr != nil {
+		model.timer = newFallbackTimerModel("timer init error: " + timerErr.Error())
+	} else {
+		model.timer = timerModel
+	}
+
+	return model, nil
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
+	if m.activeTab == tabTimer && m.timer.state.Running {
+		return timerTick()
+	}
 	return nil
 }
 
@@ -50,6 +93,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		bodyWidth, bodyHeight := m.bodySize()
+		m.entries.SetSize(bodyWidth, bodyHeight)
+		m.report.SetSize(bodyWidth, bodyHeight)
+		m.timer.SetSize(bodyWidth, bodyHeight)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -66,41 +113,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingG = false
 			switch key {
 			case "t":
-				m.nextTab()
-				return m, nil
+				return m, m.nextTab()
 			case "T":
-				m.prevTab()
-				return m, nil
+				return m, m.prevTab()
 			}
 		}
 
 		switch key {
 		case "tab":
-			m.nextTab()
+			return m, m.nextTab()
 		case "1":
-			m.activeTab = tabEntries
+			return m, m.switchTab(tabEntries)
 		case "2":
-			m.activeTab = tabReport
+			return m, m.switchTab(tabReport)
 		case "3":
-			m.activeTab = tabTimer
+			return m, m.switchTab(tabTimer)
 		case "?":
 			m.showHelp = !m.showHelp
+			return m, nil
 		case "g":
 			m.pendingG = true
+			return m, nil
 		case "Z":
 			m.pendingZ = true
+			return m, nil
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		}
 	}
 
-	return m, nil
+	return m.updateActiveTab(msg)
 }
 
 // View implements tea.Model.
 func (m Model) View() string {
 	header := m.renderTabs()
-	body := m.styles.Body.Render(m.renderBody())
+	body := m.renderBody()
 
 	help := m.styles.Hint.Render("Press ? for help")
 	if m.showHelp {
@@ -116,16 +164,16 @@ func (m Model) View() string {
 	return rendered
 }
 
-func (m *Model) nextTab() {
-	m.activeTab = (m.activeTab + 1) % tabCount
+func (m *Model) nextTab() tea.Cmd {
+	return m.switchTab((m.activeTab + 1) % tabCount)
 }
 
-func (m *Model) prevTab() {
-	if m.activeTab == 0 {
-		m.activeTab = tabCount - 1
-		return
+func (m *Model) prevTab() tea.Cmd {
+	next := m.activeTab - 1
+	if next < 0 {
+		next = tabCount - 1
 	}
-	m.activeTab--
+	return m.switchTab(next)
 }
 
 func (m Model) renderTabs() string {
@@ -143,12 +191,79 @@ func (m Model) renderTabs() string {
 func (m Model) renderBody() string {
 	switch m.activeTab {
 	case tabEntries:
-		return "Entries screen scaffold.\nList/search/edit wiring lands in next tasks."
+		if m.entriesErr != "" {
+			return m.styles.Body.Render("Entries\n\nFailed to load entries: " + m.entriesErr)
+		}
+		return m.entries.View(m.styles)
 	case tabReport:
-		return "Report screen scaffold.\nWeekly report table wiring lands in next tasks."
+		if m.entriesErr != "" {
+			return m.styles.Body.Render("Report\n\nUnavailable because entries failed to load: " + m.entriesErr)
+		}
+		if m.reportErr != "" {
+			return m.styles.Body.Render("Report\n\nFailed to build report: " + m.reportErr)
+		}
+		return m.report.View(m.styles)
 	case tabTimer:
-		return "Timer screen scaffold.\nLive timer integration lands in next tasks."
+		return m.timer.View()
 	default:
 		return ""
+	}
+}
+
+func newFallbackTimerModel(status string) TimerModel {
+	return TimerModel{
+		helpStyle:   lipgloss.NewStyle().Faint(true),
+		timerStyle:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF")),
+		statusStyle: lipgloss.NewStyle().Italic(true),
+		font:        "doom",
+		workStatus:  status,
+	}
+}
+
+func (m *Model) switchTab(next tab) tea.Cmd {
+	m.activeTab = next
+	if m.activeTab == tabTimer && m.timer.state.Running {
+		return timerTick()
+	}
+	return nil
+}
+
+func (m Model) bodySize() (int, int) {
+	width := m.width - 4
+	height := m.height - 6
+
+	if width < 20 {
+		width = m.width
+	}
+	if height < 6 {
+		height = m.height
+	}
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+	return width, height
+}
+
+func (m Model) updateActiveTab(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.activeTab {
+	case tabEntries:
+		updated, cmd := m.entries.Update(msg)
+		m.entries = updated
+		return m, cmd
+	case tabReport:
+		updated, cmd := m.report.Update(msg)
+		m.report = updated
+		return m, cmd
+	case tabTimer:
+		updatedModel, cmd := m.timer.Update(msg)
+		if updated, ok := updatedModel.(TimerModel); ok {
+			m.timer = updated
+		}
+		return m, cmd
+	default:
+		return m, nil
 	}
 }

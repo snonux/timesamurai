@@ -11,7 +11,10 @@ func newTUICmd() *cobra.Command {
 		Use:   "tui",
 		Short: "Launch full-screen TUI",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			model := tuiapp.NewModel()
+			model, err := tuiapp.NewModelWithConfig(CurrentConfig())
+			if err != nil {
+				return err
+			}
 			program := tea.NewProgram(model)
 			return program.Start()
 		},

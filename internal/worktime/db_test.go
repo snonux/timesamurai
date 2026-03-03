@@ -129,6 +129,32 @@ func TestLoadAllMergesAndSortsEntries(t *testing.T) {
 	}
 }
 
+func TestLoadAllBackfillsMissingSourceFromHost(t *testing.T) {
+	dbDir := t.TempDir()
+	dbFile := filepath.Join(dbDir, "db.host-a.json")
+	content := `{
+  "entries": {
+    "host-a": [
+      {"action":"login","what":"work","epoch":10,"human":"h1"}
+    ]
+  }
+}`
+	if err := os.WriteFile(dbFile, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	entries, err := LoadAll(dbDir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+	if entries[0].Source != "host-a" {
+		t.Fatalf("entries[0].Source = %q, want host-a", entries[0].Source)
+	}
+}
+
 func TestLoadAllOnMissingDirectoryReturnsEmptySlice(t *testing.T) {
 	dbDir := filepath.Join(t.TempDir(), "does-not-exist")
 
@@ -156,6 +182,32 @@ func TestLoadHostInvalidJSON(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "parse db file") {
 		t.Fatalf("LoadHost() error = %v, want parse db file context", err)
+	}
+}
+
+func TestLoadAllAcceptsFloatValueEncoding(t *testing.T) {
+	dbDir := t.TempDir()
+	dbFile := filepath.Join(dbDir, "db.host-a.json")
+	content := `{
+  "entries": {
+    "host-a": [
+      {"action":"add","what":"work","epoch":10,"source":"host-a","human":"h1","value":31680.000000000004}
+    ]
+  }
+}`
+	if err := os.WriteFile(dbFile, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	entries, err := LoadAll(dbDir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+	if entries[0].Value != 31680 {
+		t.Fatalf("entries[0].Value = %d, want 31680", entries[0].Value)
 	}
 }
 

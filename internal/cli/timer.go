@@ -41,11 +41,11 @@ func newTimerStartCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rawStatus, err := timrTimer.GetRawStatus()
 			if err != nil {
-				return err
+				return fmt.Errorf("get raw timer status: %w", err)
 			}
 			status, err := strconv.ParseFloat(rawStatus, 64)
 			if err != nil {
-				return err
+				return fmt.Errorf("parse raw timer status %q: %w", rawStatus, err)
 			}
 
 			output, err := timrTimer.StartTimer(status > 0)
@@ -67,7 +67,7 @@ func newTimerStopCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			output, err := timrTimer.StopTimer()
 			if err != nil {
-				return err
+				return fmt.Errorf("stop timer: %w", err)
 			}
 			if err := syncWorktimeWithTimer(false); err != nil {
 				return err
@@ -84,11 +84,11 @@ func newTimerContinueCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rawStatus, err := timrTimer.GetRawStatus()
 			if err != nil {
-				return err
+				return fmt.Errorf("get raw timer status: %w", err)
 			}
 			status, err := strconv.ParseFloat(rawStatus, 64)
 			if err != nil {
-				return err
+				return fmt.Errorf("parse raw timer status %q: %w", rawStatus, err)
 			}
 
 			output := "Timer is at 0, cannot continue."
@@ -111,7 +111,7 @@ func newTimerResetCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			output, err := timrTimer.ResetTimer()
 			if err != nil {
-				return err
+				return fmt.Errorf("reset timer: %w", err)
 			}
 			return printOutput(cmd, output)
 		},
@@ -163,7 +163,7 @@ func newTimerPromptCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			output, err := timrTimer.GetPromptStatus()
 			if err != nil {
-				return err
+				return fmt.Errorf("get prompt timer status: %w", err)
 			}
 			return printOutput(cmd, output)
 		},
@@ -179,7 +179,7 @@ func newTimerTrackCmd() *cobra.Command {
 			description := strings.Join(args, " ")
 			output, err := timrTimer.TrackTime(description)
 			if err != nil {
-				return err
+				return fmt.Errorf("track timer entry %q: %w", description, err)
 			}
 			return printOutput(cmd, output)
 		},

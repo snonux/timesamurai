@@ -84,6 +84,12 @@ func NewTimerModel(font string, cfg config.Config) (TimerModel, error) {
 	return model, nil
 }
 
+// SetSize updates timer viewport dimensions.
+func (m *TimerModel) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+}
+
 // Init is called when the model starts.
 func (m TimerModel) Init() tea.Cmd {
 	if m.state.Running {

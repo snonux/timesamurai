@@ -1,14 +1,24 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"codeberg.org/snonux/timr/internal/duration"
 	"codeberg.org/snonux/timr/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+type entryEditField int
+
+const (
+	entryEditFieldDescription entryEditField = iota
+	entryEditFieldValue
 )
 
 // EntriesModel is a chronological worktime entry browser.
@@ -33,7 +43,12 @@ type EntriesModel struct {
 	editMode      bool
 	confirmDelete bool
 
-	input string
+	input     string
+	editField entryEditField
+
+	dbDir         string
+	statusMessage string
+	statusError   bool
 }
 
 // NewEntriesModel creates an entry browser model.
@@ -43,6 +58,11 @@ func NewEntriesModel(entries []worktime.Entry) EntriesModel {
 	}
 	model.SetEntries(entries)
 	return model
+}
+
+// SetPersistence enables edit/delete persistence against dbDir.
+func (m *EntriesModel) SetPersistence(dbDir string) {
+	m.dbDir = strings.TrimSpace(dbDir)
 }
 
 // SetSize updates viewport size used for scrolling.
@@ -79,7 +99,11 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 	if m.confirmDelete {
 		switch keyMsg.String() {
 		case "y":
-			m.deleteSelected()
+			if err := m.deleteSelected(); err != nil {
+				m.setStatusError("Delete failed: " + err.Error())
+			} else {
+				m.setStatusInfo("Entry deleted.")
+			}
 			m.confirmDelete = false
 		case "n", "esc":
 			m.confirmDelete = false
@@ -90,7 +114,11 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 	if m.editMode {
 		switch keyMsg.String() {
 		case "enter":
-			m.saveEdit()
+			if err := m.saveEdit(); err != nil {
+				m.setStatusError("Edit failed: " + err.Error())
+			} else {
+				m.setStatusInfo("Entry updated.")
+			}
 			m.editMode = false
 			m.input = ""
 		case "esc":
@@ -148,7 +176,11 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		m.pendingG = false
 		m.pendingD = false
 	case "e", "enter":
-		m.beginEdit()
+		m.beginEditDescription()
+		m.pendingG = false
+		m.pendingD = false
+	case "v":
+		m.beginEditValue()
 		m.pendingG = false
 		m.pendingD = false
 	case "o":
@@ -231,19 +263,28 @@ func (m EntriesModel) View(styles Styles) string {
 		return styles.Body.Render(title + "\n\nf " + m.input)
 	}
 	if m.editMode {
-		return styles.Body.Render(title + "\n\nEdit description: " + m.input)
+		prompt := "Edit description: "
+		if m.editField == entryEditFieldValue {
+			prompt = "Edit value (e.g. 90m, 3600, -600): "
+		}
+		return styles.Body.Render(title + "\n\n" + prompt + m.input)
 	}
 	if m.confirmDelete {
 		return styles.Body.Render(title + "\n\nDelete selected entry? (y/n)")
 	}
 
 	if len(m.visible) == 0 {
-		return styles.Body.Render(title + "\n\nNo entries match current search/filter.")
+		body := title + "\n\nNo entries match current search/filter."
+		return styles.Body.Render(body + m.renderStatus(styles))
 	}
 
 	maxRows := m.listRows()
 	end := minInt(len(m.visible), m.offset+maxRows)
 	lines := make([]string, 0, end-m.offset)
+	selectedStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#28323F")).
+		Bold(true)
+
 	for idx := m.offset; idx < end; idx++ {
 		entry := m.visible[idx]
 		cursor := " "
@@ -255,10 +296,15 @@ func (m EntriesModel) View(styles Styles) string {
 		category := colorizeCategory(entry.What)
 		value := formatEntryValue(entry)
 		line := fmt.Sprintf("%s %s %-7s %-18s %-8s %s", cursor, timestamp, entry.Action, category, value, entry.Descr)
+		if idx == m.cursor {
+			line = selectedStyle.Render(line)
+		}
 		lines = append(lines, line)
 	}
 
-	return styles.Body.Render(title + "\n\n" + strings.Join(lines, "\n"))
+	body := title + "\n\n" + strings.Join(lines, "\n")
+	body += "\n\n" + styles.Hint.Render("j/k move, e edit description, v edit value, dd delete")
+	return styles.Body.Render(body + m.renderStatus(styles))
 }
 
 func (m *EntriesModel) applyFilters() {
@@ -313,39 +359,79 @@ func (m *EntriesModel) moveCursor(delta int) {
 	m.ensureCursorVisible()
 }
 
-func (m *EntriesModel) beginEdit() {
+func (m *EntriesModel) beginEditDescription() {
 	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
 		return
 	}
 
 	m.editMode = true
+	m.editField = entryEditFieldDescription
 	m.input = m.visible[m.cursor].Descr
 }
 
-func (m *EntriesModel) saveEdit() {
+func (m *EntriesModel) beginEditValue() {
 	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
 		return
 	}
 
-	oldEntry := m.visible[m.cursor]
-	newEntry := oldEntry
-	newEntry.Descr = strings.TrimSpace(m.input)
-	m.replaceEntry(oldEntry, newEntry)
+	entry := m.visible[m.cursor]
+	if strings.ToLower(strings.TrimSpace(entry.Action)) != "add" {
+		m.setStatusError("Only 'add' entries have an editable value.")
+		return
+	}
+
+	m.editMode = true
+	m.editField = entryEditFieldValue
+	m.input = strconv.FormatInt(entry.Value, 10)
 }
 
-func (m *EntriesModel) deleteSelected() {
+func (m *EntriesModel) saveEdit() error {
 	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
-		return
+		return nil
+	}
+
+	oldEntry := m.visible[m.cursor]
+	newEntry := oldEntry
+
+	switch m.editField {
+	case entryEditFieldValue:
+		if strings.ToLower(strings.TrimSpace(newEntry.Action)) != "add" {
+			return errors.New("only 'add' entries have an editable value")
+		}
+		parsedValue, err := duration.Parse(m.input)
+		if err != nil {
+			return err
+		}
+		newEntry.Value = int64(parsedValue / time.Second)
+	default:
+		newEntry.Descr = strings.TrimSpace(m.input)
+	}
+
+	if err := m.persistReplacement(oldEntry, newEntry); err != nil {
+		return err
+	}
+	m.replaceEntry(oldEntry, newEntry)
+	return nil
+}
+
+func (m *EntriesModel) deleteSelected() error {
+	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
+		return nil
 	}
 
 	target := m.visible[m.cursor]
 	idx := findEntryIndex(m.allEntries, target)
 	if idx < 0 {
-		return
+		return errors.New("selected entry not found in current list")
+	}
+
+	if err := m.persistDelete(target); err != nil {
+		return err
 	}
 
 	m.allEntries = append(m.allEntries[:idx], m.allEntries[idx+1:]...)
 	m.applyFilters()
+	return nil
 }
 
 func (m *EntriesModel) insertEntry(above bool) {
@@ -394,6 +480,67 @@ func (m *EntriesModel) replaceEntry(oldEntry, newEntry worktime.Entry) {
 		m.cursor = newIdx
 		m.ensureCursorVisible()
 	}
+}
+
+func (m EntriesModel) persistReplacement(oldEntry, newEntry worktime.Entry) error {
+	if m.dbDir == "" {
+		return nil
+	}
+
+	host := strings.TrimSpace(oldEntry.Source)
+	if host == "" {
+		return errors.New("selected entry has no source host")
+	}
+
+	index, err := findHostEntryIndex(m.dbDir, host, oldEntry)
+	if err != nil {
+		return err
+	}
+
+	newEntry.Source = host
+	_, err = worktime.EditEntry(m.dbDir, host, index, newEntry)
+	return err
+}
+
+func (m EntriesModel) persistDelete(target worktime.Entry) error {
+	if m.dbDir == "" {
+		return nil
+	}
+
+	host := strings.TrimSpace(target.Source)
+	if host == "" {
+		return errors.New("selected entry has no source host")
+	}
+
+	index, err := findHostEntryIndex(m.dbDir, host, target)
+	if err != nil {
+		return err
+	}
+
+	_, err = worktime.DeleteEntry(m.dbDir, host, index)
+	return err
+}
+
+func (m *EntriesModel) setStatusInfo(message string) {
+	m.statusMessage = strings.TrimSpace(message)
+	m.statusError = false
+}
+
+func (m *EntriesModel) setStatusError(message string) {
+	m.statusMessage = strings.TrimSpace(message)
+	m.statusError = true
+}
+
+func (m EntriesModel) renderStatus(styles Styles) string {
+	if strings.TrimSpace(m.statusMessage) == "" {
+		return ""
+	}
+
+	if m.statusError {
+		return "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8B8B")).Render(m.statusMessage)
+	}
+
+	return "\n\n" + styles.Hint.Render(m.statusMessage)
 }
 
 func (m *EntriesModel) ensureCursorVisible() {
@@ -487,6 +634,22 @@ func findEntryIndex(entries []worktime.Entry, target worktime.Entry) int {
 		}
 	}
 	return -1
+}
+
+func findHostEntryIndex(dbDir, host string, target worktime.Entry) (int, error) {
+	db, err := worktime.LoadHost(dbDir, host)
+	if err != nil {
+		return -1, err
+	}
+
+	entries := db.Entries[host]
+	for idx, entry := range entries {
+		if entry == target {
+			return idx, nil
+		}
+	}
+
+	return -1, fmt.Errorf("entry not found in host db %q", host)
 }
 
 func insertEntryAt(entries []worktime.Entry, idx int, entry worktime.Entry) []worktime.Entry {

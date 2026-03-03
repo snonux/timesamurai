@@ -1,13 +1,17 @@
 package tui
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"codeberg.org/snonux/timr/internal/config"
+	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestTabNavigation(t *testing.T) {
-	model := NewModel()
+	model := newRootModelForTest(t)
 
 	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	model = modelAny.(Model)
@@ -31,7 +35,7 @@ func TestTabNavigation(t *testing.T) {
 }
 
 func TestHelpToggle(t *testing.T) {
-	model := NewModel()
+	model := newRootModelForTest(t)
 
 	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model = modelAny.(Model)
@@ -47,7 +51,7 @@ func TestHelpToggle(t *testing.T) {
 }
 
 func TestQuitKeys(t *testing.T) {
-	model := NewModel()
+	model := newRootModelForTest(t)
 
 	modelAny, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	model = modelAny.(Model)
@@ -71,9 +75,37 @@ func TestQuitKeys(t *testing.T) {
 }
 
 func TestViewContainsTabLabels(t *testing.T) {
-	model := NewModel()
+	model := newRootModelForTest(t)
 	view := model.View()
 	if view == "" {
 		t.Fatal("View() returned empty output")
 	}
+}
+
+func TestEntriesTabUsesEntriesModelView(t *testing.T) {
+	model := newRootModelForTest(t)
+	view := model.renderBody()
+	if strings.Contains(view, "scaffold") {
+		t.Fatalf("renderBody() should not return scaffold text: %q", view)
+	}
+}
+
+func newRootModelForTest(t *testing.T) Model {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	timrTimer.SetStateFilePathOverride(filepath.Join(tempDir, ".timr_state"))
+	t.Cleanup(func() {
+		timrTimer.SetStateFilePathOverride("")
+	})
+
+	cfg := config.Default()
+	cfg.WorktimeDBDir = tempDir
+	cfg.Hostname = "host-a"
+
+	model, err := NewModelWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("NewModelWithConfig() error = %v", err)
+	}
+	return model
 }
