@@ -68,19 +68,31 @@ func StopTimer() (string, error) {
 	return "Timer stopped.", nil
 }
 
-func GetStatus() (string, error) {
-	state, err := LoadState()
+func getElapsed() (state State, elapsed time.Duration, err error) {
+	state, err = LoadState()
 	if err != nil {
-		return "", fmt.Errorf("error loading state: %w", err)
+		return state, 0, fmt.Errorf("error loading state: %w", err)
+	}
+
+	elapsed = state.ElapsedTime
+	if state.Running {
+		elapsed += time.Since(state.StartTime)
+	}
+
+	return state, elapsed, nil
+}
+
+func GetStatus() (string, error) {
+	state, elapsed, err := getElapsed()
+	if err != nil {
+		return "", err
 	}
 
 	if state.Running {
-		elapsed := (state.ElapsedTime + time.Since(state.StartTime)).Round(time.Second)
-		return fmt.Sprintf("Status: Running\nElapsed Time: %s", elapsed), nil
+		return fmt.Sprintf("Status: Running\nElapsed Time: %s", elapsed.Round(time.Second)), nil
 	}
 
-	elapsed := state.ElapsedTime.Round(time.Second)
-	return fmt.Sprintf("Status: Stopped\nElapsed Time: %s", elapsed), nil
+	return fmt.Sprintf("Status: Stopped\nElapsed Time: %s", elapsed.Round(time.Second)), nil
 }
 
 func ResetTimer() (string, error) {
@@ -101,42 +113,27 @@ func ResetTimer() (string, error) {
 }
 
 func GetRawStatus() (string, error) {
-	state, err := LoadState()
+	_, elapsed, err := getElapsed()
 	if err != nil {
-		return "", fmt.Errorf("error loading state: %w", err)
-	}
-
-	elapsed := state.ElapsedTime
-	if state.Running {
-		elapsed += time.Since(state.StartTime)
+		return "", err
 	}
 
 	return fmt.Sprintf("%f", elapsed.Seconds()), nil
 }
 
 func GetRawMinutesStatus() (string, error) {
-	state, err := LoadState()
+	_, elapsed, err := getElapsed()
 	if err != nil {
-		return "", fmt.Errorf("error loading state: %w", err)
-	}
-
-	elapsed := state.ElapsedTime
-	if state.Running {
-		elapsed += time.Since(state.StartTime)
+		return "", err
 	}
 
 	return fmt.Sprintf("%d", int(elapsed.Minutes())), nil
 }
 
 func GetPromptStatus() (string, error) {
-	state, err := LoadState()
+	state, elapsed, err := getElapsed()
 	if err != nil {
-		return "", fmt.Errorf("error loading state: %w", err)
-	}
-
-	elapsed := state.ElapsedTime
-	if state.Running {
-		elapsed += time.Since(state.StartTime)
+		return "", err
 	}
 
 	if elapsed == 0 {
