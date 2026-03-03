@@ -34,11 +34,15 @@ type TimerModel struct {
 	font        string
 	fontIndex   int
 
-	workEnabled  bool
-	workDBDir    string
-	workHost     string
-	workLoggedIn bool
-	workStatus   string
+	work workIntegration
+}
+
+type workIntegration struct {
+	enabled  bool
+	dbDir    string
+	host     string
+	loggedIn bool
+	status   string
 }
 
 // NewTimerModel builds the timer screen model.
@@ -68,16 +72,21 @@ func NewTimerModel(font string, cfg config.Config) (TimerModel, error) {
 		statusStyle: lipgloss.NewStyle().Italic(true),
 		font:        selectedFont,
 		fontIndex:   fontIndex,
-		workStatus:  "work integration disabled",
+		work: workIntegration{
+			status: "work integration disabled",
+		},
 	}
 
 	if strings.TrimSpace(cfg.WorktimeDBDir) != "" {
 		host, err := cfg.EffectiveHostname()
 		if err == nil {
-			model.workEnabled = true
-			model.workDBDir = cfg.WorktimeDBDir
-			model.workHost = host
-			model.refreshWorkStatus()
+			model.work = workIntegration{
+				enabled: true,
+				dbDir:   cfg.WorktimeDBDir,
+				host:    host,
+				status:  "work integration enabled",
+			}
+			model.work.refreshStatus()
 		}
 	}
 
@@ -127,19 +136,19 @@ func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state.Running = true
 				m.state.StartTime = time.Now()
 				if err := m.state.Save(); err != nil {
-					m.workStatus = "save error: " + err.Error()
+					m.work.status = "save error: " + err.Error()
 				}
 				return m, timerTick()
 			}
 			if err := m.state.Save(); err != nil {
-				m.workStatus = "save error: " + err.Error()
+				m.work.status = "save error: " + err.Error()
 			}
 			return m, nil
 
 		case "r":
 			m.state = timrTimer.State{}
 			if _, err := timrTimer.ResetTimer(); err != nil {
-				m.workStatus = "reset error: " + err.Error()
+				m.work.status = "reset error: " + err.Error()
 			}
 			return m, nil
 
@@ -149,7 +158,7 @@ func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "l":
-			m.toggleWorkLogin()
+			m.work.toggle()
 			return m, nil
 		}
 	}
@@ -181,7 +190,7 @@ func (m TimerModel) View() string {
 		m.statusStyle.Render(status),
 		"",
 		m.helpStyle.Render(fmt.Sprintf("Font: %s", m.font)),
-		m.helpStyle.Render(fmt.Sprintf("Work: %s", m.workStatus)),
+		m.helpStyle.Render(fmt.Sprintf("Work: %s", m.work.status)),
 		m.helpStyle.Render("s/Space: start-stop, r: reset, f: change font, l: work login/logout, q: quit"),
 	}
 
@@ -209,44 +218,44 @@ func (m TimerModel) renderTimer(elapsed time.Duration) string {
 	return m.timerStyle.Render(asciiTime)
 }
 
-func (m *TimerModel) toggleWorkLogin() {
-	if !m.workEnabled {
-		m.workStatus = "work integration disabled"
+func (w *workIntegration) toggle() {
+	if !w.enabled {
+		w.status = "work integration disabled"
 		return
 	}
 
 	now := time.Now()
 	var err error
-	if m.workLoggedIn {
-		_, err = worktime.Logout(m.workDBDir, m.workHost, "work", now, "tui timer toggle")
+	if w.loggedIn {
+		_, err = worktime.Logout(w.dbDir, w.host, "work", now, "tui timer toggle")
 	} else {
-		_, err = worktime.Login(m.workDBDir, m.workHost, "work", now, "tui timer toggle")
+		_, err = worktime.Login(w.dbDir, w.host, "work", now, "tui timer toggle")
 	}
 	if err != nil {
-		m.workStatus = "work toggle error: " + err.Error()
+		w.status = "work toggle error: " + err.Error()
 		return
 	}
 
-	m.refreshWorkStatus()
+	w.refreshStatus()
 }
 
-func (m *TimerModel) refreshWorkStatus() {
-	if !m.workEnabled {
-		m.workStatus = "work integration disabled"
+func (w *workIntegration) refreshStatus() {
+	if !w.enabled {
+		w.status = "work integration disabled"
 		return
 	}
 
-	entries, err := worktime.LoadAll(m.workDBDir)
+	entries, err := worktime.LoadAll(w.dbDir)
 	if err != nil {
-		m.workStatus = "work status error: " + err.Error()
+		w.status = "work status error: " + err.Error()
 		return
 	}
 
-	m.workLoggedIn = workCategoryLoggedIn(entries)
-	if m.workLoggedIn {
-		m.workStatus = "logged in"
+	w.loggedIn = workCategoryLoggedIn(entries)
+	if w.loggedIn {
+		w.status = "logged in"
 	} else {
-		m.workStatus = "logged out"
+		w.status = "logged out"
 	}
 }
 

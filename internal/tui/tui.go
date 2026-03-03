@@ -216,7 +216,9 @@ func newFallbackTimerModel(status string) TimerModel {
 		timerStyle:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF")),
 		statusStyle: lipgloss.NewStyle().Italic(true),
 		font:        "doom",
-		workStatus:  status,
+		work: workIntegration{
+			status: status,
+		},
 	}
 }
 

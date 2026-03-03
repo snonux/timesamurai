@@ -21,19 +21,19 @@ func TestTimerModelToggleWorkLogin(t *testing.T) {
 		t.Fatalf("NewTimerModel() error = %v", err)
 	}
 
-	if !model.workEnabled {
+	if !model.work.enabled {
 		t.Fatal("work integration should be enabled")
 	}
 
 	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	model = modelAny.(TimerModel)
-	if !model.workLoggedIn {
+	if !model.work.loggedIn {
 		t.Fatal("work should be logged in after first l")
 	}
 
 	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	model = modelAny.(TimerModel)
-	if model.workLoggedIn {
+	if model.work.loggedIn {
 		t.Fatal("work should be logged out after second l")
 	}
 
@@ -75,8 +75,8 @@ func TestTimerModelWorkToggleWhenDisabled(t *testing.T) {
 
 	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	model = modelAny.(TimerModel)
-	if model.workStatus != "work integration disabled" {
-		t.Fatalf("workStatus = %q, want work integration disabled", model.workStatus)
+	if model.work.status != "work integration disabled" {
+		t.Fatalf("workStatus = %q, want work integration disabled", model.work.status)
 	}
 }
 
