@@ -100,6 +100,74 @@ func TestEntriesSearchAndFilter(t *testing.T) {
 	}
 }
 
+func TestEntriesEditFlow(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(3))
+	model.SetSize(120, 12)
+
+	original := model.visible[0].Descr
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if !model.editMode {
+		t.Fatal("editMode = false, want true after e")
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if model.editMode {
+		t.Fatal("editMode = true, want false after Enter")
+	}
+	if model.visible[0].Descr != original+"!" {
+		t.Fatalf("edited description = %q, want %q", model.visible[0].Descr, original+"!")
+	}
+}
+
+func TestEntriesDeleteWithConfirmation(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(3))
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if !model.confirmDelete {
+		t.Fatal("confirmDelete = false, want true after dd")
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if model.confirmDelete {
+		t.Fatal("confirmDelete = true after cancel")
+	}
+	if len(model.visible) != 3 {
+		t.Fatalf("entries len = %d, want 3 after cancel", len(model.visible))
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if len(model.visible) != 2 {
+		t.Fatalf("entries len = %d, want 2 after delete confirmation", len(model.visible))
+	}
+}
+
+func TestEntriesInsertWithOAndShiftO(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(2))
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	if len(model.visible) != 3 {
+		t.Fatalf("entries len = %d, want 3 after o", len(model.visible))
+	}
+	if !model.editMode {
+		t.Fatal("editMode = false after o insertion")
+	}
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'O'}})
+	if len(model.visible) != 4 {
+		t.Fatalf("entries len = %d, want 4 after O", len(model.visible))
+	}
+}
+
 func sampleEntries(count int) []worktime.Entry {
 	entries := make([]worktime.Entry, 0, count)
 	for idx := 0; idx < count; idx++ {

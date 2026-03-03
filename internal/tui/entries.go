@@ -22,12 +22,16 @@ type EntriesModel struct {
 	height int
 
 	pendingG bool
+	pendingD bool
 
 	searchMode  bool
 	searchQuery string
 
 	filterMode  bool
 	filterQuery string
+
+	editMode      bool
+	confirmDelete bool
 
 	input string
 }
@@ -65,10 +69,42 @@ func (m *EntriesModel) SetEntries(entries []worktime.Entry) {
 	m.applyFilters()
 }
 
-// Update handles keyboard navigation and search/filter interaction.
+// Update handles keyboard navigation and search/filter/edit interaction.
 func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
+		return m, nil
+	}
+
+	if m.confirmDelete {
+		switch keyMsg.String() {
+		case "y":
+			m.deleteSelected()
+			m.confirmDelete = false
+		case "n", "esc":
+			m.confirmDelete = false
+		}
+		return m, nil
+	}
+
+	if m.editMode {
+		switch keyMsg.String() {
+		case "enter":
+			m.saveEdit()
+			m.editMode = false
+			m.input = ""
+		case "esc":
+			m.editMode = false
+			m.input = ""
+		case "backspace":
+			if len(m.input) > 0 {
+				m.input = m.input[:len(m.input)-1]
+			}
+		default:
+			if keyMsg.Type == tea.KeyRunes {
+				m.input += string(keyMsg.Runes)
+			}
+		}
 		return m, nil
 	}
 
@@ -105,42 +141,74 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		m.searchMode = true
 		m.input = ""
 		m.pendingG = false
+		m.pendingD = false
 	case "f":
 		m.filterMode = true
 		m.input = m.filterQuery
 		m.pendingG = false
+		m.pendingD = false
+	case "e", "enter":
+		m.beginEdit()
+		m.pendingG = false
+		m.pendingD = false
+	case "o":
+		m.insertEntry(false)
+		m.pendingG = false
+		m.pendingD = false
+	case "O":
+		m.insertEntry(true)
+		m.pendingG = false
+		m.pendingD = false
+	case "d":
+		if m.pendingD {
+			m.confirmDelete = true
+			m.pendingD = false
+			return m, nil
+		}
+		m.pendingD = true
+		m.pendingG = false
 	case "j", "down":
 		m.moveCursor(1)
 		m.pendingG = false
+		m.pendingD = false
 	case "k", "up":
 		m.moveCursor(-1)
 		m.pendingG = false
+		m.pendingD = false
 	case "G":
 		m.cursor = len(m.visible) - 1
 		m.ensureCursorVisible()
 		m.pendingG = false
+		m.pendingD = false
 	case "g":
 		if m.pendingG {
 			m.cursor = 0
 			m.ensureCursorVisible()
 			m.pendingG = false
+			m.pendingD = false
 			return m, nil
 		}
 		m.pendingG = true
+		m.pendingD = false
 	case "ctrl+d":
 		m.moveCursor(m.halfPage())
 		m.pendingG = false
+		m.pendingD = false
 	case "ctrl+u":
 		m.moveCursor(-m.halfPage())
 		m.pendingG = false
+		m.pendingD = false
 	case "ctrl+f":
 		m.moveCursor(m.pageSize())
 		m.pendingG = false
+		m.pendingD = false
 	case "ctrl+b":
 		m.moveCursor(-m.pageSize())
 		m.pendingG = false
+		m.pendingD = false
 	default:
 		m.pendingG = false
+		m.pendingD = false
 	}
 
 	return m, nil
@@ -161,6 +229,12 @@ func (m EntriesModel) View(styles Styles) string {
 	}
 	if m.filterMode {
 		return styles.Body.Render(title + "\n\nf " + m.input)
+	}
+	if m.editMode {
+		return styles.Body.Render(title + "\n\nEdit description: " + m.input)
+	}
+	if m.confirmDelete {
+		return styles.Body.Render(title + "\n\nDelete selected entry? (y/n)")
 	}
 
 	if len(m.visible) == 0 {
@@ -237,6 +311,89 @@ func (m *EntriesModel) moveCursor(delta int) {
 		m.cursor = len(m.visible) - 1
 	}
 	m.ensureCursorVisible()
+}
+
+func (m *EntriesModel) beginEdit() {
+	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
+		return
+	}
+
+	m.editMode = true
+	m.input = m.visible[m.cursor].Descr
+}
+
+func (m *EntriesModel) saveEdit() {
+	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
+		return
+	}
+
+	oldEntry := m.visible[m.cursor]
+	newEntry := oldEntry
+	newEntry.Descr = strings.TrimSpace(m.input)
+	m.replaceEntry(oldEntry, newEntry)
+}
+
+func (m *EntriesModel) deleteSelected() {
+	if len(m.visible) == 0 || m.cursor >= len(m.visible) {
+		return
+	}
+
+	target := m.visible[m.cursor]
+	idx := findEntryIndex(m.allEntries, target)
+	if idx < 0 {
+		return
+	}
+
+	m.allEntries = append(m.allEntries[:idx], m.allEntries[idx+1:]...)
+	m.applyFilters()
+}
+
+func (m *EntriesModel) insertEntry(above bool) {
+	newEntry := worktime.Entry{
+		Action: "add",
+		What:   "work",
+		Epoch:  time.Now().Unix(),
+		Source: "local",
+		Human:  time.Now().Format("Mon 02.01.2006 15:04:05"),
+		Value:  int64(time.Hour / time.Second),
+	}
+
+	insertAt := len(m.allEntries)
+	if len(m.visible) > 0 && m.cursor < len(m.visible) {
+		target := m.visible[m.cursor]
+		if idx := findEntryIndex(m.allEntries, target); idx >= 0 {
+			insertAt = idx
+			if !above {
+				insertAt++
+			}
+		}
+	}
+
+	m.allEntries = insertEntryAt(m.allEntries, insertAt, newEntry)
+	m.applyFilters()
+
+	if idx := findEntryIndex(m.visible, newEntry); idx >= 0 {
+		m.cursor = idx
+		m.ensureCursorVisible()
+	}
+
+	m.editMode = true
+	m.input = ""
+}
+
+func (m *EntriesModel) replaceEntry(oldEntry, newEntry worktime.Entry) {
+	idx := findEntryIndex(m.allEntries, oldEntry)
+	if idx < 0 {
+		return
+	}
+
+	m.allEntries[idx] = newEntry
+	m.applyFilters()
+
+	if newIdx := findEntryIndex(m.visible, newEntry); newIdx >= 0 {
+		m.cursor = newIdx
+		m.ensureCursorVisible()
+	}
 }
 
 func (m *EntriesModel) ensureCursorVisible() {
@@ -321,4 +478,27 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func findEntryIndex(entries []worktime.Entry, target worktime.Entry) int {
+	for idx, entry := range entries {
+		if entry == target {
+			return idx
+		}
+	}
+	return -1
+}
+
+func insertEntryAt(entries []worktime.Entry, idx int, entry worktime.Entry) []worktime.Entry {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(entries) {
+		idx = len(entries)
+	}
+
+	entries = append(entries, worktime.Entry{})
+	copy(entries[idx+1:], entries[idx:])
+	entries[idx] = entry
+	return entries
 }
