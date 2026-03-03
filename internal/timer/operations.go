@@ -57,10 +57,10 @@ func GetStatus() (string, error) {
 	if state.Running {
 		elapsed := (state.ElapsedTime + time.Since(state.StartTime)).Round(time.Second)
 		return fmt.Sprintf("Status: Running\nElapsed Time: %s", elapsed), nil
-	} else {
-		elapsed := state.ElapsedTime.Round(time.Second)
-		return fmt.Sprintf("Status: Stopped\nElapsed Time: %s", elapsed), nil
 	}
+
+	elapsed := state.ElapsedTime.Round(time.Second)
+	return fmt.Sprintf("Status: Stopped\nElapsed Time: %s", elapsed), nil
 }
 
 func ResetTimer() (string, error) {
