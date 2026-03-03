@@ -96,74 +96,106 @@ func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		return *m, nil
 	}
 
-	if m.confirmDelete {
-		switch keyMsg.String() {
-		case "y":
-			if err := m.deleteSelected(); err != nil {
-				m.setStatusError("Delete failed: " + err.Error())
-			} else {
-				m.setStatusInfo("Entry deleted.")
-			}
-			m.confirmDelete = false
-		case "n", "esc":
-			m.confirmDelete = false
-		}
+	if m.updateConfirmDelete(keyMsg.String()) {
 		return *m, nil
 	}
 
-	if m.editMode {
-		switch keyMsg.String() {
-		case "enter":
-			if err := m.saveEdit(); err != nil {
-				m.setStatusError("Edit failed: " + err.Error())
-			} else {
-				m.setStatusInfo("Entry updated.")
-			}
-			m.editMode = false
-			m.input = ""
-		case "esc":
-			m.editMode = false
-			m.input = ""
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-		default:
-			if keyMsg.Type == tea.KeyRunes {
-				m.input += string(keyMsg.Runes)
-			}
-		}
+	if m.updateEditMode(keyMsg) {
 		return *m, nil
 	}
 
-	if m.searchMode || m.filterMode {
-		switch keyMsg.String() {
-		case "enter":
-			if m.searchMode {
-				m.searchQuery = strings.TrimSpace(m.input)
-				m.searchMode = false
-			} else {
-				m.filterQuery = strings.TrimSpace(m.input)
-				m.filterMode = false
-			}
-			m.input = ""
-			m.applyFilters()
-		case "esc":
+	if m.updateSearchFilterMode(keyMsg) {
+		return *m, nil
+	}
+
+	m.updateNormalMode(keyMsg)
+	return *m, nil
+}
+
+func (m *EntriesModel) updateConfirmDelete(key string) bool {
+	if !m.confirmDelete {
+		return false
+	}
+
+	switch key {
+	case "y":
+		if err := m.deleteSelected(); err != nil {
+			m.setStatusError("Delete failed: " + err.Error())
+		} else {
+			m.setStatusInfo("Entry deleted.")
+		}
+		m.confirmDelete = false
+	case "n", "esc":
+		m.confirmDelete = false
+	}
+
+	return true
+}
+
+func (m *EntriesModel) updateEditMode(keyMsg tea.KeyMsg) bool {
+	if !m.editMode {
+		return false
+	}
+
+	switch keyMsg.String() {
+	case "enter":
+		if err := m.saveEdit(); err != nil {
+			m.setStatusError("Edit failed: " + err.Error())
+		} else {
+			m.setStatusInfo("Entry updated.")
+		}
+		m.editMode = false
+		m.input = ""
+	case "esc":
+		m.editMode = false
+		m.input = ""
+	case "backspace":
+		if len(m.input) > 0 {
+			m.input = m.input[:len(m.input)-1]
+		}
+	default:
+		if keyMsg.Type == tea.KeyRunes {
+			m.input += string(keyMsg.Runes)
+		}
+	}
+
+	return true
+}
+
+func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyMsg) bool {
+	if !m.searchMode && !m.filterMode {
+		return false
+	}
+
+	switch keyMsg.String() {
+	case "enter":
+		if m.searchMode {
+			m.searchQuery = strings.TrimSpace(m.input)
 			m.searchMode = false
+		} else {
+			m.filterQuery = strings.TrimSpace(m.input)
 			m.filterMode = false
-			m.input = ""
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-		default:
-			if keyMsg.Type == tea.KeyRunes {
-				m.input += string(keyMsg.Runes)
-			}
 		}
-		return *m, nil
+		m.input = ""
+		m.applyFilters()
+	case "esc":
+		m.searchMode = false
+		m.filterMode = false
+		m.input = ""
+	case "backspace":
+		if len(m.input) > 0 {
+			m.input = m.input[:len(m.input)-1]
+		}
+	default:
+		if keyMsg.Type == tea.KeyRunes {
+			m.input += string(keyMsg.Runes)
+		}
 	}
 
+	return true
+}
+
+func (m *EntriesModel) updateNormalMode(keyMsg tea.KeyMsg) {
 	switch keyMsg.String() {
 	case "/":
 		m.searchMode = true
@@ -195,7 +227,7 @@ func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		if m.pendingD {
 			m.confirmDelete = true
 			m.pendingD = false
-			return *m, nil
+			return
 		}
 		m.pendingD = true
 		m.pendingG = false
@@ -218,7 +250,7 @@ func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 			m.ensureCursorVisible()
 			m.pendingG = false
 			m.pendingD = false
-			return *m, nil
+			return
 		}
 		m.pendingG = true
 		m.pendingD = false
@@ -242,8 +274,6 @@ func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		m.pendingG = false
 		m.pendingD = false
 	}
-
-	return *m, nil
 }
 
 // View renders the entries list.
