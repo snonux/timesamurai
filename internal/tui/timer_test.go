@@ -1,11 +1,9 @@
 package tui
 
 import (
-	"path/filepath"
 	"testing"
 
 	"codeberg.org/snonux/timr/internal/config"
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	"codeberg.org/snonux/timr/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -84,10 +82,7 @@ func TestTimerModelWorkToggleWhenDisabled(t *testing.T) {
 
 func setupTimerStateForTUI(t *testing.T) {
 	t.Helper()
-
 	tempDir := t.TempDir()
-	timrTimer.SetStateFilePathOverride(filepath.Join(tempDir, ".timr_state"))
-	t.Cleanup(func() {
-		timrTimer.SetStateFilePathOverride("")
-	})
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 }

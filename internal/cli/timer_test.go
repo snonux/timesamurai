@@ -2,12 +2,10 @@ package cli
 
 import (
 	"bytes"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	"codeberg.org/snonux/timr/internal/worktime"
 )
 
@@ -142,10 +140,7 @@ func TestTimerAutoWorktimeSyncIgnoresNotLoggedInOnStop(t *testing.T) {
 
 func setupTimerState(t *testing.T) {
 	t.Helper()
-
 	tempDir := t.TempDir()
-	timrTimer.SetStateFilePathOverride(filepath.Join(tempDir, ".timr_state"))
-	t.Cleanup(func() {
-		timrTimer.SetStateFilePathOverride("")
-	})
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 }

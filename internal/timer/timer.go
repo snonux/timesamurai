@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -11,33 +12,36 @@ const (
 	stateFile = ".timr_state"
 )
 
-// StateFilePathOverride is used by tests to override the state file path.
-var StateFilePathOverride string
-
-func SetStateFilePathOverride(path string) {
-	StateFilePathOverride = path
-}
-
 type State struct {
-	StartTime    time.Time
-	ElapsedTime  time.Duration
-	Running      bool
+	StartTime   time.Time
+	ElapsedTime time.Duration
+	Running     bool
 }
 
-func GetStateFile() (string, error) {
-	if StateFilePathOverride != "" {
-		return StateFilePathOverride, nil
+func resolveStateFilePath(path string) (string, error) {
+	if strings.TrimSpace(path) != "" {
+		return path, nil
 	}
+
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
+
 	return filepath.Join(configDir, "timr", stateFile), nil
 }
 
+func GetStateFile() (string, error) {
+	return resolveStateFilePath("")
+}
+
 func LoadState() (State, error) {
+	return LoadStateAt("")
+}
+
+func LoadStateAt(path string) (State, error) {
 	var state State
-	stateFilePath, err := GetStateFile()
+	stateFilePath, err := resolveStateFilePath(path)
 	if err != nil {
 		return state, err
 	}
@@ -55,12 +59,16 @@ func LoadState() (State, error) {
 }
 
 func (s *State) Save() error {
+	return s.SaveAt("")
+}
+
+func (s *State) SaveAt(path string) error {
 	data, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
 
-	stateFilePath, err := GetStateFile()
+	stateFilePath, err := resolveStateFilePath(path)
 	if err != nil {
 		return err
 	}

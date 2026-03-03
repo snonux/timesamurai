@@ -1,12 +1,10 @@
 package tui
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"codeberg.org/snonux/timr/internal/config"
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -94,10 +92,8 @@ func newRootModelForTest(t *testing.T) *Model {
 	t.Helper()
 
 	tempDir := t.TempDir()
-	timrTimer.SetStateFilePathOverride(filepath.Join(tempDir, ".timr_state"))
-	t.Cleanup(func() {
-		timrTimer.SetStateFilePathOverride("")
-	})
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 
 	cfg := config.Default()
 	cfg.WorktimeDBDir = tempDir

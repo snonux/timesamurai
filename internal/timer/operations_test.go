@@ -13,10 +13,8 @@ import (
 func setup(t *testing.T) {
 	t.Helper()
 	tempDir := t.TempDir()
-	StateFilePathOverride = filepath.Join(tempDir, ".timr_state")
-	t.Cleanup(func() {
-		StateFilePathOverride = ""
-	})
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
 }
 
 func TestStartTimer(t *testing.T) {
