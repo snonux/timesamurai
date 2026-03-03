@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
+	"codeberg.org/snonux/timr/internal/worktime"
 )
 
 func TestTimerStartAndStopCommands(t *testing.T) {
@@ -70,6 +71,45 @@ func TestTimerStatusFlagConflict(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--raw") {
 		t.Fatalf("timer status conflict error = %v", err)
+	}
+}
+
+func TestTimerAutoWorktimeSync(t *testing.T) {
+	setupTimerState(t)
+
+	dbDir := t.TempDir()
+	cfgPath := writeWorkConfigWithAuto(t, dbDir, "host-auto", true)
+
+	out, err := runRootCommand("--config", cfgPath, "timer", "start")
+	if err != nil {
+		t.Fatalf("timer start error = %v (output: %q)", err, out)
+	}
+	out, err = runRootCommand("--config", cfgPath, "timer", "stop")
+	if err != nil {
+		t.Fatalf("timer stop error = %v (output: %q)", err, out)
+	}
+
+	entries, err := worktime.LoadAll(dbDir)
+	if err != nil {
+		t.Fatalf("LoadAll() error = %v", err)
+	}
+
+	var hasLogin bool
+	var hasLogout bool
+	for _, entry := range entries {
+		if entry.What != "work" {
+			continue
+		}
+		if entry.Action == "login" {
+			hasLogin = true
+		}
+		if entry.Action == "logout" {
+			hasLogout = true
+		}
+	}
+
+	if !hasLogin || !hasLogout {
+		t.Fatalf("auto worktime sync missing login/logout entries: %+v", entries)
 	}
 }
 

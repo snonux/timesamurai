@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	timrTimer "codeberg.org/snonux/timr/internal/timer"
 )
 
 func TestWorkLoginStatusLogoutFlow(t *testing.T) {
@@ -74,12 +77,48 @@ func TestWorkAddSubUseBufferAndReport(t *testing.T) {
 	}
 }
 
+func TestWorkLoginLogoutWithTimerFlags(t *testing.T) {
+	setupTimerState(t)
+
+	dbDir := t.TempDir()
+	cfgPath := writeWorkConfig(t, dbDir, "host-c")
+
+	out, err := runRootCommand("--config", cfgPath, "work", "login", "--at", "2026-01-08T09:00", "--start-timer")
+	if err != nil {
+		t.Fatalf("work login --start-timer error = %v (output: %q)", err, out)
+	}
+	state, err := timrTimer.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if !state.Running {
+		t.Fatal("timer should be running after --start-timer")
+	}
+
+	out, err = runRootCommand("--config", cfgPath, "work", "logout", "--at", "2026-01-08T10:00", "--stop-timer")
+	if err != nil {
+		t.Fatalf("work logout --stop-timer error = %v (output: %q)", err, out)
+	}
+	state, err = timrTimer.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if state.Running {
+		t.Fatal("timer should be stopped after --stop-timer")
+	}
+}
+
 func writeWorkConfig(t *testing.T, dbDir, host string) string {
+	return writeWorkConfigWithAuto(t, dbDir, host, false)
+}
+
+func writeWorkConfigWithAuto(t *testing.T, dbDir, host string, auto bool) string {
 	t.Helper()
 
 	content := `{
   "worktime_db_dir": "` + dbDir + `",
-  "hostname": "` + host + `"
+  "hostname": "` + host + `",
+  "auto_worktime_login": ` + strconv.FormatBool(auto) + `
 }
 `
 	path := filepath.Join(t.TempDir(), "config.json")

@@ -6,10 +6,12 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"strings"
+	"time"
 
 	"codeberg.org/snonux/timr/internal/ascii"
 	"codeberg.org/snonux/timr/internal/live"
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
+	"codeberg.org/snonux/timr/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
@@ -50,6 +52,9 @@ func newTimerStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := syncWorktimeWithTimer(true); err != nil {
+				return err
+			}
 			return printOutput(cmd, output)
 		},
 	}
@@ -62,6 +67,9 @@ func newTimerStopCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			output, err := timrTimer.StopTimer()
 			if err != nil {
+				return err
+			}
+			if err := syncWorktimeWithTimer(false); err != nil {
 				return err
 			}
 			return printOutput(cmd, output)
@@ -205,5 +213,34 @@ func printOutput(cmd *cobra.Command, output string) error {
 	}
 
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), output)
+	return err
+}
+
+func syncWorktimeWithTimer(start bool) error {
+	cfg := CurrentConfig()
+	if !cfg.AutoWorktimeLogin {
+		return nil
+	}
+
+	ctx, err := resolveWorkContext()
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	if start {
+		_, err = worktime.Login(ctx.dbDir, ctx.host, "work", now, "auto timer start")
+	} else {
+		_, err = worktime.Logout(ctx.dbDir, ctx.host, "work", now, "auto timer stop")
+	}
+	if err == nil {
+		return nil
+	}
+
+	// Avoid failing timer commands on no-op state sync mismatches.
+	if strings.Contains(err.Error(), "already logged in") || strings.Contains(err.Error(), "not logged in") {
+		return nil
+	}
+
 	return err
 }

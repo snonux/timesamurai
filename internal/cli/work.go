@@ -14,6 +14,7 @@ import (
 
 	"codeberg.org/snonux/timr/internal/duration"
 	"codeberg.org/snonux/timr/internal/timefmt"
+	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	"codeberg.org/snonux/timr/internal/worktime"
 	"github.com/spf13/cobra"
 )
@@ -46,6 +47,7 @@ func newWorkLoginCmd() *cobra.Command {
 	var category string
 	var at string
 	var descr string
+	var startTimer bool
 
 	cmd := &cobra.Command{
 		Use:   "login",
@@ -66,13 +68,23 @@ func newWorkLoginCmd() *cobra.Command {
 				return err
 			}
 
-			return printOutput(cmd, fmt.Sprintf("Logged in: %s at %s", entry.What, entry.Human))
+			message := fmt.Sprintf("Logged in: %s at %s", entry.What, entry.Human)
+			if startTimer {
+				timerMessage, err := startTimerFromWorkCommand()
+				if err != nil {
+					return err
+				}
+				message += "\n" + timerMessage
+			}
+
+			return printOutput(cmd, message)
 		},
 	}
 
 	cmd.Flags().StringVarP(&category, "category", "c", "work", "Category to log in")
 	cmd.Flags().StringVar(&at, "at", "", "Timestamp override (unix, ISO, today, yesterday)")
 	cmd.Flags().StringVarP(&descr, "descr", "d", "", "Description")
+	cmd.Flags().BoolVar(&startTimer, "start-timer", false, "Also start the stopwatch timer")
 	return cmd
 }
 
@@ -80,6 +92,7 @@ func newWorkLogoutCmd() *cobra.Command {
 	var category string
 	var at string
 	var descr string
+	var stopTimer bool
 
 	cmd := &cobra.Command{
 		Use:   "logout",
@@ -100,13 +113,23 @@ func newWorkLogoutCmd() *cobra.Command {
 				return err
 			}
 
-			return printOutput(cmd, fmt.Sprintf("Logged out: %s at %s", entry.What, entry.Human))
+			message := fmt.Sprintf("Logged out: %s at %s", entry.What, entry.Human)
+			if stopTimer {
+				timerMessage, err := stopTimerFromWorkCommand()
+				if err != nil {
+					return err
+				}
+				message += "\n" + timerMessage
+			}
+
+			return printOutput(cmd, message)
 		},
 	}
 
 	cmd.Flags().StringVarP(&category, "category", "c", "work", "Category to log out")
 	cmd.Flags().StringVar(&at, "at", "", "Timestamp override (unix, ISO, today, yesterday)")
 	cmd.Flags().StringVarP(&descr, "descr", "d", "", "Description")
+	cmd.Flags().BoolVar(&stopTimer, "stop-timer", false, "Also stop the stopwatch timer")
 	return cmd
 }
 
@@ -514,4 +537,20 @@ func parseImportDate(token string) (time.Time, error) {
 
 func workDBPath(dbDir, host string) string {
 	return filepath.Join(dbDir, "db."+host+".json")
+}
+
+func startTimerFromWorkCommand() (string, error) {
+	rawStatus, err := timrTimer.GetRawStatus()
+	if err != nil {
+		return "", err
+	}
+	status, err := strconv.ParseFloat(rawStatus, 64)
+	if err != nil {
+		return "", err
+	}
+	return timrTimer.StartTimer(status > 0)
+}
+
+func stopTimerFromWorkCommand() (string, error) {
+	return timrTimer.StopTimer()
 }
