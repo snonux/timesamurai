@@ -51,6 +51,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file")
 	cmd.AddCommand(newTimerCmd())
 	cmd.AddCommand(newWorkCmd())
+	cmd.AddCommand(newTUICmd())
 
 	return cmd
 }
