@@ -39,16 +39,12 @@ func newTimerStartCmd() *cobra.Command {
 		Use:   "start",
 		Short: "Start the timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rawStatus, err := timrTimer.GetRawStatus()
+			hasElapsed, err := timerHasElapsed()
 			if err != nil {
-				return fmt.Errorf("get raw timer status: %w", err)
-			}
-			status, err := strconv.ParseFloat(rawStatus, 64)
-			if err != nil {
-				return fmt.Errorf("parse raw timer status %q: %w", rawStatus, err)
+				return err
 			}
 
-			output, err := timrTimer.StartTimer(status > 0)
+			output, err := timrTimer.StartTimer(hasElapsed)
 			if err != nil {
 				return err
 			}
@@ -82,17 +78,13 @@ func newTimerContinueCmd() *cobra.Command {
 		Use:   "continue",
 		Short: "Continue a stopped timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rawStatus, err := timrTimer.GetRawStatus()
+			hasElapsed, err := timerHasElapsed()
 			if err != nil {
-				return fmt.Errorf("get raw timer status: %w", err)
-			}
-			status, err := strconv.ParseFloat(rawStatus, 64)
-			if err != nil {
-				return fmt.Errorf("parse raw timer status %q: %w", rawStatus, err)
+				return err
 			}
 
 			output := "Timer is at 0, cannot continue."
-			if status > 0 {
+			if hasElapsed {
 				output, err = timrTimer.StartTimer(true)
 				if err != nil {
 					return err
@@ -247,4 +239,18 @@ func syncWorktimeWithTimer(cmd *cobra.Command, start bool) error {
 	}
 
 	return err
+}
+
+func timerHasElapsed() (bool, error) {
+	rawStatus, err := timrTimer.GetRawStatus()
+	if err != nil {
+		return false, fmt.Errorf("get raw timer status: %w", err)
+	}
+
+	status, err := strconv.ParseFloat(rawStatus, 64)
+	if err != nil {
+		return false, fmt.Errorf("parse raw timer status %q: %w", rawStatus, err)
+	}
+
+	return status > 0, nil
 }

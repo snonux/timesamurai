@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -404,15 +403,11 @@ func workDBPath(dbDir, host string) string {
 }
 
 func startTimerFromWorkCommand() (string, error) {
-	rawStatus, err := timrTimer.GetRawStatus()
+	hasElapsed, err := timerHasElapsed()
 	if err != nil {
 		return "", err
 	}
-	status, err := strconv.ParseFloat(rawStatus, 64)
-	if err != nil {
-		return "", err
-	}
-	return timrTimer.StartTimer(status > 0)
+	return timrTimer.StartTimer(hasElapsed)
 }
 
 func stopTimerFromWorkCommand() (string, error) {
