@@ -2,6 +2,7 @@ package worktime
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -48,6 +49,21 @@ func TestLoginValidationIsCategoryScoped(t *testing.T) {
 	}
 	if _, err := Login(dbDir, host, "lunch", time.Unix(110, 0), ""); err != nil {
 		t.Fatalf("Login(lunch) error = %v", err)
+	}
+}
+
+func TestActiveCategories(t *testing.T) {
+	entries := []Entry{
+		{Action: "login", What: "work"},
+		{Action: "login", What: "lunch"},
+		{Action: "logout", What: "lunch"},
+		{Action: "login", What: ""},
+	}
+
+	got := ActiveCategories(entries)
+	want := []string{"work"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ActiveCategories() = %v, want %v", got, want)
 	}
 }
 

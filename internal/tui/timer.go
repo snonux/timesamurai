@@ -260,22 +260,10 @@ func (w *workIntegration) refreshStatus() {
 }
 
 func workCategoryLoggedIn(entries []worktime.Entry) bool {
-	loggedIn := false
-	for _, entry := range entries {
-		category := strings.TrimSpace(entry.What)
-		if category == "" {
-			category = "work"
-		}
-		if category != "work" {
-			continue
-		}
-
-		switch strings.ToLower(strings.TrimSpace(entry.Action)) {
-		case "login":
-			loggedIn = true
-		case "logout":
-			loggedIn = false
+	for _, category := range worktime.ActiveCategories(entries) {
+		if category == "work" {
+			return true
 		}
 	}
-	return loggedIn
+	return false
 }

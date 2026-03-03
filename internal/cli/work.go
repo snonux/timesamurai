@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -296,7 +295,7 @@ func newWorkStatusCmd() *cobra.Command {
 				return err
 			}
 
-			active := activeCategories(entries)
+			active := worktime.ActiveCategories(entries)
 			if len(active) == 0 {
 				return printOutput(cmd, "Not logged in.")
 			}
@@ -394,33 +393,6 @@ func parseAtOrNow(value string) (time.Time, error) {
 		return time.Now(), nil
 	}
 	return timefmt.Parse(value)
-}
-
-func activeCategories(entries []worktime.Entry) []string {
-	status := map[string]bool{}
-
-	for _, entry := range entries {
-		category := strings.TrimSpace(entry.What)
-		if category == "" {
-			category = "work"
-		}
-
-		switch strings.ToLower(strings.TrimSpace(entry.Action)) {
-		case "login":
-			status[category] = true
-		case "logout":
-			status[category] = false
-		}
-	}
-
-	active := make([]string, 0)
-	for category, isActive := range status {
-		if isActive {
-			active = append(active, category)
-		}
-	}
-	sort.Strings(active)
-	return active
 }
 
 func importReportFile(ctx workContext, report io.Reader) (int, error) {

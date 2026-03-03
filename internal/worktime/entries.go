@@ -3,6 +3,7 @@ package worktime
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -186,18 +187,35 @@ func isLoggedIn(dbDir, category string) (bool, error) {
 		return false, err
 	}
 
+	for _, active := range ActiveCategories(entries) {
+		if active == category {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ActiveCategories returns sorted categories that are currently logged in.
+func ActiveCategories(entries []Entry) []string {
 	status := map[string]bool{}
 	for _, entry := range entries {
-		cat := normalizeCategory(entry.What)
+		category := normalizeCategory(entry.What)
 		switch strings.ToLower(strings.TrimSpace(entry.Action)) {
 		case actionLogin:
-			status[cat] = true
+			status[category] = true
 		case actionLogout:
-			status[cat] = false
+			status[category] = false
 		}
 	}
 
-	return status[category], nil
+	active := make([]string, 0, len(status))
+	for category, loggedIn := range status {
+		if loggedIn {
+			active = append(active, category)
+		}
+	}
+	sort.Strings(active)
+	return active
 }
 
 func normalizeCategory(category string) string {
