@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -350,9 +350,21 @@ func newWorkImportCmd() *cobra.Command {
 				return err
 			}
 
-			imported, err := importReportFile(ctx, args[0])
+			file, err := os.Open(args[0])
 			if err != nil {
 				return err
+			}
+
+			imported, err := importReportFile(ctx, file)
+			closeErr := file.Close()
+			if err != nil {
+				if closeErr != nil {
+					return errors.Join(err, fmt.Errorf("close import file %q: %w", args[0], closeErr))
+				}
+				return err
+			}
+			if closeErr != nil {
+				return fmt.Errorf("close import file %q: %w", args[0], closeErr)
 			}
 
 			return printOutput(cmd, fmt.Sprintf("Imported %d entries.", imported))
@@ -411,139 +423,8 @@ func activeCategories(entries []worktime.Entry) []string {
 	return active
 }
 
-func importReportFile(ctx workContext, path string) (imported int, err error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer func() {
-		closeErr := file.Close()
-		if closeErr == nil {
-			return
-		}
-		wrappedCloseErr := fmt.Errorf("close import file %q: %w", path, closeErr)
-		if err == nil {
-			err = wrappedCloseErr
-			return
-		}
-		err = errors.Join(err, wrappedCloseErr)
-	}()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.Contains(line, "lunch:") {
-			continue
-		}
-
-		when, workHours, lunchHours, offHours, err := parseImportLine(line)
-		if err != nil {
-			return imported, err
-		}
-
-		workSeconds := int64(workHours * float64(time.Hour/time.Second))
-		lunchSeconds := int64(lunchHours * float64(time.Hour/time.Second))
-		offSeconds := int64(offHours * float64(time.Hour/time.Second))
-
-		if lunchSeconds > 0 {
-			workSeconds += lunchSeconds
-		}
-
-		if workSeconds > 0 {
-			if _, err := worktime.Add(ctx.dbDir, ctx.host, "work", time.Duration(workSeconds)*time.Second, when, ""); err != nil {
-				return imported, err
-			}
-			imported++
-		}
-		if lunchSeconds > 0 {
-			if _, err := worktime.Add(ctx.dbDir, ctx.host, "lunch", time.Duration(lunchSeconds)*time.Second, when, ""); err != nil {
-				return imported, err
-			}
-			imported++
-		}
-		if offSeconds > 0 {
-			if _, err := worktime.Add(ctx.dbDir, ctx.host, "off", time.Duration(offSeconds)*time.Second, when, ""); err != nil {
-				return imported, err
-			}
-			imported++
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return imported, err
-	}
-
-	return imported, nil
-}
-
-func parseImportLine(line string) (time.Time, float64, float64, float64, error) {
-	fields := strings.Fields(line)
-	if len(fields) < 7 {
-		return time.Time{}, 0, 0, 0, fmt.Errorf("unsupported import line: %q", line)
-	}
-
-	dateToken := strings.TrimSuffix(fields[1], ":")
-	workToken := fields[2]
-	lunchToken := fields[4]
-	offToken := fields[6]
-
-	when, err := parseImportDate(dateToken)
-	if err != nil {
-		return time.Time{}, 0, 0, 0, err
-	}
-
-	workHours, err := parseHourToken(workToken)
-	if err != nil {
-		return time.Time{}, 0, 0, 0, err
-	}
-	lunchHours, err := parseHourToken(lunchToken)
-	if err != nil {
-		return time.Time{}, 0, 0, 0, err
-	}
-	offHours, err := parseHourToken(offToken)
-	if err != nil {
-		return time.Time{}, 0, 0, 0, err
-	}
-
-	return when, workHours, lunchHours, offHours, nil
-}
-
-func parseHourToken(token string) (float64, error) {
-	clean := strings.TrimSpace(token)
-	if idx := strings.Index(clean, ":"); idx >= 0 {
-		clean = clean[idx+1:]
-	}
-	clean = strings.TrimSuffix(clean, "h")
-
-	value, err := strconv.ParseFloat(clean, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse hour token %q: %w", token, err)
-	}
-	return value, nil
-}
-
-func parseImportDate(token string) (time.Time, error) {
-	trimmed := strings.TrimSpace(token)
-	if trimmed == "" {
-		return time.Time{}, errors.New("import date is empty")
-	}
-
-	parsed, parseErr := timefmt.Parse(trimmed)
-	if parseErr == nil {
-		return parsed, nil
-	}
-
-	layouts := []string{
-		"02.01.2006",
-		"20060102",
-	}
-	for _, layout := range layouts {
-		if parsed, err := time.ParseInLocation(layout, trimmed, time.Local); err == nil {
-			return parsed, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unsupported import date %q: %w", token, parseErr)
+func importReportFile(ctx workContext, report io.Reader) (int, error) {
+	return worktime.ImportReport(ctx.dbDir, ctx.host, report)
 }
 
 func workDBPath(dbDir, host string) string {
