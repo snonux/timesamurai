@@ -90,10 +90,10 @@ func (m *EntriesModel) SetEntries(entries []worktime.Entry) {
 }
 
 // Update handles keyboard navigation and search/filter/edit interaction.
-func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
+func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return m, nil
+		return *m, nil
 	}
 
 	if m.confirmDelete {
@@ -108,7 +108,7 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		case "n", "esc":
 			m.confirmDelete = false
 		}
-		return m, nil
+		return *m, nil
 	}
 
 	if m.editMode {
@@ -133,7 +133,7 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 				m.input += string(keyMsg.Runes)
 			}
 		}
-		return m, nil
+		return *m, nil
 	}
 
 	if m.searchMode || m.filterMode {
@@ -161,7 +161,7 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 				m.input += string(keyMsg.Runes)
 			}
 		}
-		return m, nil
+		return *m, nil
 	}
 
 	switch keyMsg.String() {
@@ -195,7 +195,7 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		if m.pendingD {
 			m.confirmDelete = true
 			m.pendingD = false
-			return m, nil
+			return *m, nil
 		}
 		m.pendingD = true
 		m.pendingG = false
@@ -218,7 +218,7 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 			m.ensureCursorVisible()
 			m.pendingG = false
 			m.pendingD = false
-			return m, nil
+			return *m, nil
 		}
 		m.pendingG = true
 		m.pendingD = false
@@ -243,11 +243,11 @@ func (m EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 		m.pendingD = false
 	}
 
-	return m, nil
+	return *m, nil
 }
 
 // View renders the entries list.
-func (m EntriesModel) View(styles Styles) string {
+func (m *EntriesModel) View(styles Styles) string {
 	title := fmt.Sprintf("Entries  [%d/%d]", minInt(m.cursor+1, len(m.visible)), len(m.visible))
 	if m.filterQuery != "" {
 		title += "  filter:" + m.filterQuery
@@ -482,7 +482,7 @@ func (m *EntriesModel) replaceEntry(oldEntry, newEntry worktime.Entry) {
 	}
 }
 
-func (m EntriesModel) persistReplacement(oldEntry, newEntry worktime.Entry) error {
+func (m *EntriesModel) persistReplacement(oldEntry, newEntry worktime.Entry) error {
 	if m.dbDir == "" {
 		return nil
 	}
@@ -502,7 +502,7 @@ func (m EntriesModel) persistReplacement(oldEntry, newEntry worktime.Entry) erro
 	return err
 }
 
-func (m EntriesModel) persistDelete(target worktime.Entry) error {
+func (m *EntriesModel) persistDelete(target worktime.Entry) error {
 	if m.dbDir == "" {
 		return nil
 	}
@@ -531,7 +531,7 @@ func (m *EntriesModel) setStatusError(message string) {
 	m.statusError = true
 }
 
-func (m EntriesModel) renderStatus(styles Styles) string {
+func (m *EntriesModel) renderStatus(styles Styles) string {
 	if strings.TrimSpace(m.statusMessage) == "" {
 		return ""
 	}
@@ -566,7 +566,7 @@ func (m *EntriesModel) ensureCursorVisible() {
 	}
 }
 
-func (m EntriesModel) listRows() int {
+func (m *EntriesModel) listRows() int {
 	rows := m.height - 4
 	if rows < 1 {
 		return 1
@@ -574,7 +574,7 @@ func (m EntriesModel) listRows() int {
 	return rows
 }
 
-func (m EntriesModel) halfPage() int {
+func (m *EntriesModel) halfPage() int {
 	page := m.listRows() / 2
 	if page < 1 {
 		return 1
@@ -582,7 +582,7 @@ func (m EntriesModel) halfPage() int {
 	return page
 }
 
-func (m EntriesModel) pageSize() int {
+func (m *EntriesModel) pageSize() int {
 	page := m.listRows()
 	if page < 1 {
 		return 1

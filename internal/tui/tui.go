@@ -41,14 +41,14 @@ type Model struct {
 }
 
 // NewModel creates a new root TUI model.
-func NewModel() Model {
+func NewModel() *Model {
 	model, _ := NewModelWithConfig(config.Default())
 	return model
 }
 
 // NewModelWithConfig creates a data-backed root model from config.
-func NewModelWithConfig(cfg config.Config) (Model, error) {
-	model := Model{
+func NewModelWithConfig(cfg config.Config) (*Model, error) {
+	model := &Model{
 		activeTab: tabEntries,
 		styles:    DefaultStyles(),
 		entries:   NewEntriesModel(nil),
@@ -80,7 +80,7 @@ func NewModelWithConfig(cfg config.Config) (Model, error) {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	if m.activeTab == tabTimer && m.timer.state.Running {
 		return timerTick()
 	}
@@ -88,7 +88,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -146,7 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (m Model) View() string {
+func (m *Model) View() string {
 	header := m.renderTabs()
 	body := m.renderBody()
 
@@ -176,7 +176,7 @@ func (m *Model) prevTab() tea.Cmd {
 	return m.switchTab(next)
 }
 
-func (m Model) renderTabs() string {
+func (m *Model) renderTabs() string {
 	parts := make([]string, 0, len(tabLabels))
 	for idx, label := range tabLabels {
 		if tab(idx) == m.activeTab {
@@ -188,7 +188,7 @@ func (m Model) renderTabs() string {
 	return m.styles.Header.Render(strings.Join(parts, " "))
 }
 
-func (m Model) renderBody() string {
+func (m *Model) renderBody() string {
 	switch m.activeTab {
 	case tabEntries:
 		if m.entriesErr != "" {
@@ -228,7 +228,7 @@ func (m *Model) switchTab(next tab) tea.Cmd {
 	return nil
 }
 
-func (m Model) bodySize() (int, int) {
+func (m *Model) bodySize() (int, int) {
 	width := m.width - 4
 	height := m.height - 6
 
@@ -247,7 +247,7 @@ func (m Model) bodySize() (int, int) {
 	return width, height
 }
 
-func (m Model) updateActiveTab(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) updateActiveTab(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.activeTab {
 	case tabEntries:
 		updated, cmd := m.entries.Update(msg)

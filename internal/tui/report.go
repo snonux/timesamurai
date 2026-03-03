@@ -59,10 +59,10 @@ func (m *ReportModel) SetWeeks(weeks []worktime.WeekReport) {
 }
 
 // Update handles keyboard interaction.
-func (m ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
+func (m *ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return m, nil
+		return *m, nil
 	}
 
 	if m.pendingBracket != 0 {
@@ -73,7 +73,7 @@ func (m ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
 				m.prevWeek()
 			}
 			m.pendingBracket = 0
-			return m, nil
+			return *m, nil
 		}
 		m.pendingBracket = 0
 	}
@@ -94,7 +94,7 @@ func (m ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
 			m.cursor = 0
 			m.ensureCursorVisible()
 			m.pendingG = false
-			return m, nil
+			return *m, nil
 		}
 		m.pendingG = true
 	case "]":
@@ -110,11 +110,11 @@ func (m ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
 		m.pendingG = false
 	}
 
-	return m, nil
+	return *m, nil
 }
 
 // View renders the report screen.
-func (m ReportModel) View(styles Styles) string {
+func (m *ReportModel) View(styles Styles) string {
 	if len(m.weeks) == 0 {
 		return styles.Body.Render("Report\n\nNo report data.")
 	}
@@ -238,7 +238,7 @@ func (m *ReportModel) prevWeek() {
 	m.offset = 0
 }
 
-func (m ReportModel) listRows() int {
+func (m *ReportModel) listRows() int {
 	rows := m.height - 7
 	if rows < 1 {
 		return 1
@@ -246,7 +246,7 @@ func (m ReportModel) listRows() int {
 	return rows
 }
 
-func (m ReportModel) rowCount() int {
+func (m *ReportModel) rowCount() int {
 	if len(m.weeks) == 0 {
 		return 0
 	}
