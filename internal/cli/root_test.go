@@ -12,8 +12,6 @@ import (
 )
 
 func TestRootVersionFlag(t *testing.T) {
-	loadedConfig = CurrentConfig()
-
 	var out bytes.Buffer
 	cmd := NewRootCmd()
 	cmd.SetOut(&out)
@@ -51,7 +49,7 @@ func TestRootLoadsConfigInPersistentPreRun(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	cfg := CurrentConfig()
+	cfg := currentConfig(cmd)
 	if cfg.Hostname != "from-config" {
 		t.Fatalf("Hostname = %q, want %q", cfg.Hostname, "from-config")
 	}
@@ -116,7 +114,7 @@ func TestRootUsesDefaultConfigWhenNoFileExists(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	cfg := CurrentConfig()
+	cfg := currentConfig(cmd)
 	if cfg.WeekWorkHours != 40 {
 		t.Fatalf("WeekWorkHours = %v, want 40", cfg.WeekWorkHours)
 	}

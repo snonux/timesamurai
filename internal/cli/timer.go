@@ -52,7 +52,7 @@ func newTimerStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := syncWorktimeWithTimer(true); err != nil {
+			if err := syncWorktimeWithTimer(cmd, true); err != nil {
 				return err
 			}
 			return printOutput(cmd, output)
@@ -69,7 +69,7 @@ func newTimerStopCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("stop timer: %w", err)
 			}
-			if err := syncWorktimeWithTimer(false); err != nil {
+			if err := syncWorktimeWithTimer(cmd, false); err != nil {
 				return err
 			}
 			return printOutput(cmd, output)
@@ -198,7 +198,7 @@ func newTimerLiveCmd() *cobra.Command {
 				selectedFont = ascii.AllFonts[rand.IntN(len(ascii.AllFonts))]
 			}
 
-			model, err := tuiapp.NewTimerModel(selectedFont, CurrentConfig())
+			model, err := tuiapp.NewTimerModel(selectedFont, currentConfig(cmd))
 			if err != nil {
 				return err
 			}
@@ -220,13 +220,13 @@ func printOutput(cmd *cobra.Command, output string) error {
 	return err
 }
 
-func syncWorktimeWithTimer(start bool) error {
-	cfg := CurrentConfig()
+func syncWorktimeWithTimer(cmd *cobra.Command, start bool) error {
+	cfg := currentConfig(cmd)
 	if !cfg.AutoWorktimeLogin {
 		return nil
 	}
 
-	ctx, err := resolveWorkContext()
+	ctx, err := resolveWorkContext(cmd)
 	if err != nil {
 		return err
 	}

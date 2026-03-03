@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	timr "codeberg.org/snonux/timr/internal"
@@ -8,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loadedConfig = config.Default()
+type configContextKey struct{}
 
 // Execute runs the root command.
 func Execute() error {
@@ -34,7 +35,7 @@ func NewRootCmd() *cobra.Command {
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			loadedConfig = cfg
+			setConfig(cmd, cfg)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -56,7 +57,27 @@ func NewRootCmd() *cobra.Command {
 	return cmd
 }
 
-// CurrentConfig returns the config loaded in PersistentPreRunE.
-func CurrentConfig() config.Config {
-	return loadedConfig
+func setConfig(cmd *cobra.Command, cfg config.Config) {
+	baseContext := cmd.Context()
+	if baseContext == nil {
+		baseContext = context.Background()
+	}
+	cmd.SetContext(context.WithValue(baseContext, configContextKey{}, cfg))
+}
+
+func currentConfig(cmd *cobra.Command) config.Config {
+	if cmd == nil {
+		return config.Default()
+	}
+
+	commandContext := cmd.Context()
+	if commandContext == nil {
+		return config.Default()
+	}
+
+	cfg, ok := commandContext.Value(configContextKey{}).(config.Config)
+	if !ok {
+		return config.Default()
+	}
+	return cfg
 }

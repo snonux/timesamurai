@@ -53,7 +53,7 @@ func newWorkLoginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "Start work-time tracking",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -98,7 +98,7 @@ func newWorkLogoutCmd() *cobra.Command {
 		Use:   "logout",
 		Short: "Stop work-time tracking",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -143,7 +143,7 @@ func newWorkAddCmd() *cobra.Command {
 		Short: "Add manual work-time duration",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -183,7 +183,7 @@ func newWorkSubCmd() *cobra.Command {
 		Short: "Subtract manual work-time duration",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -222,7 +222,7 @@ func newWorkUseBufferCmd() *cobra.Command {
 		Short: "Transfer selfdevelopment buffer time into work",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -259,7 +259,7 @@ func newWorkReportCmd() *cobra.Command {
 		Use:   "report",
 		Short: "Print weekly work-time report",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := CurrentConfig()
+			cfg := currentConfig(cmd)
 
 			entries, err := worktime.LoadAll(cfg.WorktimeDBDir)
 			if err != nil {
@@ -290,7 +290,7 @@ func newWorkStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show current login status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := CurrentConfig()
+			cfg := currentConfig(cmd)
 			entries, err := worktime.LoadAll(cfg.WorktimeDBDir)
 			if err != nil {
 				return err
@@ -311,7 +311,7 @@ func newWorkEditCmd() *cobra.Command {
 		Use:   "edit",
 		Short: "Open host DB JSON in $EDITOR",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -345,7 +345,7 @@ func newWorkImportCmd() *cobra.Command {
 		Short: "Import report-format text file",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, err := resolveWorkContext()
+			ctx, err := resolveWorkContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -360,8 +360,8 @@ func newWorkImportCmd() *cobra.Command {
 	}
 }
 
-func resolveWorkContext() (workContext, error) {
-	cfg := CurrentConfig()
+func resolveWorkContext(cmd *cobra.Command) (workContext, error) {
+	cfg := currentConfig(cmd)
 	if strings.TrimSpace(cfg.WorktimeDBDir) == "" {
 		return workContext{}, errors.New("worktime_db_dir is empty in config")
 	}
