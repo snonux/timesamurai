@@ -49,6 +49,7 @@ func NewRootCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&showVersion, "version", false, "Print version and exit")
 	cmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file")
+	cmd.AddCommand(newTimerCmd())
 
 	return cmd
 }
