@@ -242,7 +242,7 @@ func syncWorktimeWithTimer(start bool) error {
 	}
 
 	// Avoid failing timer commands on no-op state sync mismatches.
-	if strings.Contains(err.Error(), "already logged in") || strings.Contains(err.Error(), "not logged in") {
+	if errors.Is(err, worktime.ErrAlreadyLoggedIn) || errors.Is(err, worktime.ErrNotLoggedIn) {
 		return nil
 	}
 

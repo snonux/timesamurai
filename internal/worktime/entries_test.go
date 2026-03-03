@@ -1,6 +1,7 @@
 package worktime
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -19,6 +20,8 @@ func TestLoginLogoutValidation(t *testing.T) {
 
 	if _, err := Login(dbDir, host, "work", time.Unix(110, 0), "start again"); err == nil {
 		t.Fatal("Login() error = nil, want already logged in error")
+	} else if !errors.Is(err, ErrAlreadyLoggedIn) {
+		t.Fatalf("Login() error = %v, want ErrAlreadyLoggedIn", err)
 	}
 
 	logoutEntry, err := Logout(dbDir, host, "work", time.Unix(120, 0), "stop")
@@ -31,6 +34,8 @@ func TestLoginLogoutValidation(t *testing.T) {
 
 	if _, err := Logout(dbDir, host, "work", time.Unix(130, 0), "stop again"); err == nil {
 		t.Fatal("Logout() error = nil, want not logged in error")
+	} else if !errors.Is(err, ErrNotLoggedIn) {
+		t.Fatalf("Logout() error = %v, want ErrNotLoggedIn", err)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
 	"codeberg.org/snonux/timr/internal/worktime"
@@ -110,6 +111,32 @@ func TestTimerAutoWorktimeSync(t *testing.T) {
 
 	if !hasLogin || !hasLogout {
 		t.Fatalf("auto worktime sync missing login/logout entries: %+v", entries)
+	}
+}
+
+func TestTimerAutoWorktimeSyncIgnoresAlreadyLoggedIn(t *testing.T) {
+	setupTimerState(t)
+
+	dbDir := t.TempDir()
+	if _, err := worktime.Login(dbDir, "host-auto", "work", time.Unix(100, 0), "seed"); err != nil {
+		t.Fatalf("seed Login() error = %v", err)
+	}
+
+	cfgPath := writeWorkConfigWithAuto(t, dbDir, "host-auto", true)
+	out, err := runRootCommand("--config", cfgPath, "timer", "start")
+	if err != nil {
+		t.Fatalf("timer start error = %v (output: %q)", err, out)
+	}
+}
+
+func TestTimerAutoWorktimeSyncIgnoresNotLoggedInOnStop(t *testing.T) {
+	setupTimerState(t)
+
+	dbDir := t.TempDir()
+	cfgPath := writeWorkConfigWithAuto(t, dbDir, "host-auto", true)
+	out, err := runRootCommand("--config", cfgPath, "timer", "stop")
+	if err != nil {
+		t.Fatalf("timer stop error = %v (output: %q)", err, out)
 	}
 }
 

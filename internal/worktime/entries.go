@@ -13,6 +13,13 @@ const (
 	actionAdd    = "add"
 )
 
+var (
+	// ErrAlreadyLoggedIn indicates that a category already has an open login entry.
+	ErrAlreadyLoggedIn = errors.New("already logged in")
+	// ErrNotLoggedIn indicates that a category has no active login entry.
+	ErrNotLoggedIn = errors.New("not logged in")
+)
+
 // Login creates a login entry after validating the category is not already logged in.
 func Login(dbDir, hostname, category string, at time.Time, descr string) (Entry, error) {
 	host, err := normalizeHostname(hostname)
@@ -26,7 +33,7 @@ func Login(dbDir, hostname, category string, at time.Time, descr string) (Entry,
 		return Entry{}, err
 	}
 	if loggedIn {
-		return Entry{}, fmt.Errorf("already logged in for %q", cat)
+		return Entry{}, fmt.Errorf("%w for %q", ErrAlreadyLoggedIn, cat)
 	}
 
 	entry := newEntry(actionLogin, host, cat, at, 0, descr)
@@ -46,7 +53,7 @@ func Logout(dbDir, hostname, category string, at time.Time, descr string) (Entry
 		return Entry{}, err
 	}
 	if !loggedIn {
-		return Entry{}, fmt.Errorf("not logged in for %q", cat)
+		return Entry{}, fmt.Errorf("%w for %q", ErrNotLoggedIn, cat)
 	}
 
 	entry := newEntry(actionLogout, host, cat, at, 0, descr)
