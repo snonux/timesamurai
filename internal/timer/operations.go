@@ -1,11 +1,31 @@
 package timer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
 )
+
+// Tracker abstracts timer-to-task tracking so TrackTime can be unit-tested.
+type Tracker interface {
+	Track(description string, minutes int) error
+}
+
+type taskwarriorTracker struct{}
+
+func (taskwarriorTracker) Track(description string, minutes int) error {
+	taskDescription := fmt.Sprintf("%dmin %s", minutes, description)
+	cmd := exec.Command("task", "add", "+track", taskDescription)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("task command failed: %s\nOutput: %s", err, string(output))
+	}
+
+	return nil
+}
 
 func StartTimer(continued bool) (string, error) {
 	state, err := LoadState()
@@ -132,6 +152,14 @@ func GetPromptStatus() (string, error) {
 }
 
 func TrackTime(description string) (string, error) {
+	return TrackTimeWithTracker(description, taskwarriorTracker{})
+}
+
+func TrackTimeWithTracker(description string, tracker Tracker) (string, error) {
+	if tracker == nil {
+		return "", errors.New("tracker is nil")
+	}
+
 	// Load current state
 	state, err := LoadState()
 	if err != nil {
@@ -156,15 +184,8 @@ func TrackTime(description string) (string, error) {
 		}
 	}
 
-	// Build and execute the task command
-	taskDescription := fmt.Sprintf("%dmin %s", minutes, description)
-	cmd := exec.Command("task", "add", "+track", taskDescription)
-
-	// Execute the command and capture output
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Command failed, return error with output
-		return "", fmt.Errorf("task command failed: %s\nOutput: %s", err, string(output))
+	if err := tracker.Track(description, minutes); err != nil {
+		return "", err
 	}
 
 	// Command succeeded, reset the timer

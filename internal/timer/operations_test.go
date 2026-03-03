@@ -1,9 +1,7 @@
 package timer
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -15,6 +13,20 @@ func setup(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
 	t.Setenv("HOME", tempDir)
+}
+
+type mockTracker struct {
+	description string
+	minutes     int
+	err         error
+	calls       int
+}
+
+func (m *mockTracker) Track(description string, minutes int) error {
+	m.description = description
+	m.minutes = minutes
+	m.calls++
+	return m.err
 }
 
 func TestStartTimer(t *testing.T) {
@@ -214,46 +226,9 @@ func TestResetTimer(t *testing.T) {
 func TestTrackTime(t *testing.T) {
 	setup(t)
 
-	// Helper to create a mock task command
-	createMockTaskCommand := func(t *testing.T, shouldSucceed bool) {
-		t.Helper()
-
-		// Create a mock script that simulates the task command
-		mockScript := `#!/bin/sh
-if [ "$1" = "add" ] && [ "$2" = "+timrtest" ]; then
-	if [ "%s" = "true" ]; then
-		echo "Created task 1."
-		exit 0
-	else
-		echo "Error: Failed to add task"
-		exit 1
-	fi
-fi
-echo "Invalid command"
-exit 1
-`
-		scriptContent := fmt.Sprintf(mockScript, shouldSucceed)
-
-		// Create temp directory for our mock
-		tempDir := t.TempDir()
-		mockPath := filepath.Join(tempDir, "task")
-
-		// Write the mock script
-		if err := os.WriteFile(mockPath, []byte(scriptContent), 0o755); err != nil {
-			t.Fatalf("Failed to create mock script: %v", err)
-		}
-
-		// Update PATH to use our mock
-		oldPath := os.Getenv("PATH")
-		os.Setenv("PATH", tempDir+":"+oldPath)
-		t.Cleanup(func() {
-			os.Setenv("PATH", oldPath)
-		})
-	}
-
 	t.Run("TrackWithRunningTimer", func(t *testing.T) {
 		setup(t)
-		createMockTaskCommand(t, true)
+		tracker := &mockTracker{}
 
 		// Start timer and let it run for a bit
 		state, _ := LoadState()
@@ -262,33 +237,29 @@ exit 1
 		state.ElapsedTime = 0
 		state.Save()
 
-		// We'll modify TrackTime to use +timrtest for testing
-		// For now, test with the actual implementation
-		// In a real scenario, we'd want to make the tag configurable
-
-		// Since we can't easily test the actual command execution,
-		// we'll test the error case when task command is not found
-		msg, err := TrackTime("test description")
-
-		// We expect an error because 'task' command likely doesn't exist
-		// or our mock won't match the exact command
-		if err == nil {
-			// If it somehow succeeded, check the message
-			if msg == "" {
-				t.Error("TrackTime() returned empty message on success")
-			}
+		msg, err := TrackTimeWithTracker("test description", tracker)
+		if err != nil {
+			t.Fatalf("TrackTimeWithTracker() error = %v", err)
+		}
+		if msg == "" {
+			t.Fatal("TrackTimeWithTracker() msg is empty")
+		}
+		if tracker.calls != 1 {
+			t.Fatalf("tracker calls = %d, want 1", tracker.calls)
+		}
+		if tracker.minutes < 4 || tracker.minutes > 6 {
+			t.Fatalf("tracker minutes = %d, want around 5", tracker.minutes)
 		}
 
-		// Verify timer was stopped
 		state, _ = LoadState()
-		if state.Running {
-			t.Error("Timer should be stopped after track attempt")
+		if state.Running || state.ElapsedTime != 0 {
+			t.Fatalf("state after tracking = %+v, want reset stopped state", state)
 		}
 	})
 
-	t.Run("TrackWithStoppedTimer", func(t *testing.T) {
+	t.Run("TrackFailureKeepsElapsedState", func(t *testing.T) {
 		setup(t)
-		createMockTaskCommand(t, true)
+		tracker := &mockTracker{err: errTestTracker}
 
 		// Set up a stopped timer with some elapsed time
 		state, _ := LoadState()
@@ -296,34 +267,27 @@ exit 1
 		state.ElapsedTime = 10 * time.Minute
 		state.Save()
 
-		// Try to track time
-		_, err := TrackTime("another test")
-
-		// We expect an error because task command likely doesn't exist
-		// but we can verify the state handling
+		_, err := TrackTimeWithTracker("another test", tracker)
 		if err == nil {
-			// Verify timer was reset on success
-			state, _ = LoadState()
-			if state.ElapsedTime != 0 {
-				t.Error("Timer should be reset after successful track")
-			}
+			t.Fatal("TrackTimeWithTracker() error = nil, want tracker error")
+		}
+
+		state, _ = LoadState()
+		if state.Running {
+			t.Fatal("state.Running = true, want false after failed tracking")
+		}
+		if state.ElapsedTime != 10*time.Minute {
+			t.Fatalf("state.ElapsedTime = %v, want %v", state.ElapsedTime, 10*time.Minute)
 		}
 	})
 
-	t.Run("TrackWithZeroTime", func(t *testing.T) {
+	t.Run("NilTracker", func(t *testing.T) {
 		setup(t)
-
-		// Fresh timer with no elapsed time
-		state, _ := LoadState()
-		state.Running = false
-		state.ElapsedTime = 0
-		state.Save()
-
-		// Try to track with zero time
-		_, err := TrackTime("zero time test")
-
-		// Even with zero time, the command should be attempted
-		// We just verify no panic occurs
-		_ = err
+		_, err := TrackTimeWithTracker("zero time test", nil)
+		if err == nil {
+			t.Fatal("TrackTimeWithTracker() error = nil, want error")
+		}
 	})
 }
+
+var errTestTracker = errors.New("tracker failure")
