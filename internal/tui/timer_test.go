@@ -27,12 +27,14 @@ func TestTimerModelToggleWorkLogin(t *testing.T) {
 		t.Fatal("work integration should be enabled")
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model = modelAny.(TimerModel)
 	if !model.workLoggedIn {
 		t.Fatal("work should be logged in after first l")
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model = modelAny.(TimerModel)
 	if model.workLoggedIn {
 		t.Fatal("work should be logged out after second l")
 	}
@@ -55,7 +57,8 @@ func TestTimerModelFontCycling(t *testing.T) {
 	}
 
 	originalFont := model.font
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model = modelAny.(TimerModel)
 	if model.font == originalFont {
 		t.Fatalf("font did not change after f: %q", model.font)
 	}
@@ -72,7 +75,8 @@ func TestTimerModelWorkToggleWhenDisabled(t *testing.T) {
 		t.Fatalf("NewTimerModel() error = %v", err)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model = modelAny.(TimerModel)
 	if model.workStatus != "work integration disabled" {
 		t.Fatalf("workStatus = %q, want work integration disabled", model.workStatus)
 	}

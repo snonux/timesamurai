@@ -93,7 +93,7 @@ func (m TimerModel) Init() tea.Cmd {
 }
 
 // Update handles timer screen updates.
-func (m TimerModel) Update(msg tea.Msg) (TimerModel, tea.Cmd) {
+func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

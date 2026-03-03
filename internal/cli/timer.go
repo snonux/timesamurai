@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"codeberg.org/snonux/timr/internal/ascii"
-	"codeberg.org/snonux/timr/internal/live"
 	timrTimer "codeberg.org/snonux/timr/internal/timer"
+	tuiapp "codeberg.org/snonux/timr/internal/tui"
 	"codeberg.org/snonux/timr/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -198,7 +198,11 @@ func newTimerLiveCmd() *cobra.Command {
 				selectedFont = ascii.AllFonts[rand.IntN(len(ascii.AllFonts))]
 			}
 
-			program := tea.NewProgram(live.NewModel(selectedFont))
+			model, err := tuiapp.NewTimerModel(selectedFont, CurrentConfig())
+			if err != nil {
+				return err
+			}
+			program := tea.NewProgram(model)
 			return program.Start()
 		},
 	}
