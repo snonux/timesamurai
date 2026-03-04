@@ -18,6 +18,7 @@ const trackCommandTimeout = 10 * time.Second
 
 type taskwarriorTracker struct{}
 
+// Track creates a Taskwarrior entry for tracked timer minutes.
 func (taskwarriorTracker) Track(description string, minutes int) error {
 	taskDescription := fmt.Sprintf("%dmin %s", minutes, description)
 	ctx, cancel := context.WithTimeout(context.Background(), trackCommandTimeout)
@@ -36,6 +37,7 @@ func (taskwarriorTracker) Track(description string, minutes int) error {
 	return nil
 }
 
+// StartTimer starts the timer, or continues an existing elapsed timer when requested.
 func StartTimer(continued bool) (string, error) {
 	state, err := LoadState()
 	if err != nil {
@@ -59,6 +61,7 @@ func StartTimer(continued bool) (string, error) {
 	return "Timer started.", nil
 }
 
+// StopTimer stops the running timer and persists elapsed time.
 func StopTimer() (string, error) {
 	state, err := LoadState()
 	if err != nil {
@@ -91,6 +94,7 @@ func getElapsed() (state State, elapsed time.Duration, err error) {
 	return state, elapsed, nil
 }
 
+// GetStatus returns a human-readable timer status summary.
 func GetStatus() (string, error) {
 	state, elapsed, err := getElapsed()
 	if err != nil {
@@ -104,6 +108,7 @@ func GetStatus() (string, error) {
 	return fmt.Sprintf("Status: Stopped\nElapsed Time: %s", elapsed.Round(time.Second)), nil
 }
 
+// ResetTimer resets persisted timer state to zero.
 func ResetTimer() (string, error) {
 	stateFile, err := GetStateFile()
 	if err != nil {
@@ -121,6 +126,7 @@ func ResetTimer() (string, error) {
 	return "Timer reset.", nil
 }
 
+// GetRawStatus returns elapsed time in seconds.
 func GetRawStatus() (string, error) {
 	_, elapsed, err := getElapsed()
 	if err != nil {
@@ -130,6 +136,7 @@ func GetRawStatus() (string, error) {
 	return fmt.Sprintf("%f", elapsed.Seconds()), nil
 }
 
+// GetRawMinutesStatus returns elapsed time in whole minutes.
 func GetRawMinutesStatus() (string, error) {
 	_, elapsed, err := getElapsed()
 	if err != nil {
@@ -139,6 +146,7 @@ func GetRawMinutesStatus() (string, error) {
 	return fmt.Sprintf("%d", int(elapsed.Minutes())), nil
 }
 
+// GetPromptStatus returns compact prompt-friendly timer output.
 func GetPromptStatus() (string, error) {
 	state, elapsed, err := getElapsed()
 	if err != nil {
@@ -157,10 +165,12 @@ func GetPromptStatus() (string, error) {
 	return fmt.Sprintf("%s%s", icon, elapsed.Round(time.Second)), nil
 }
 
+// TrackTime tracks elapsed timer time with the default tracker and resets state.
 func TrackTime(description string) (string, error) {
 	return TrackTimeWithTracker(description, taskwarriorTracker{})
 }
 
+// TrackTimeWithTracker tracks elapsed time using the provided tracker implementation.
 func TrackTimeWithTracker(description string, tracker Tracker) (string, error) {
 	if tracker == nil {
 		return "", errors.New("tracker is nil")

@@ -12,6 +12,7 @@ const (
 	stateFile = ".timr_state"
 )
 
+// State stores persisted timer progress.
 type State struct {
 	StartTime   time.Time
 	ElapsedTime time.Duration
@@ -31,14 +32,17 @@ func resolveStateFilePath(path string) (string, error) {
 	return filepath.Join(configDir, "timr", stateFile), nil
 }
 
+// GetStateFile returns the default state file path.
 func GetStateFile() (string, error) {
 	return resolveStateFilePath("")
 }
 
+// LoadState loads timer state from the default state file.
 func LoadState() (State, error) {
 	return LoadStateAt("")
 }
 
+// LoadStateAt loads timer state from the provided path or default path when empty.
 func LoadStateAt(path string) (State, error) {
 	var state State
 	stateFilePath, err := resolveStateFilePath(path)
@@ -58,10 +62,12 @@ func LoadStateAt(path string) (State, error) {
 	return state, err
 }
 
+// Save writes timer state to the default state file.
 func (s *State) Save() error {
 	return s.SaveAt("")
 }
 
+// SaveAt writes timer state to the provided path or default path when empty.
 func (s *State) SaveAt(path string) error {
 	data, err := json.Marshal(s)
 	if err != nil {
