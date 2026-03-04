@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"codeberg.org/snonux/timr/internal/config"
 	"codeberg.org/snonux/timr/internal/worktime"
@@ -19,6 +20,14 @@ const (
 )
 
 var tabLabels = []string{"Entries", "Report", "Timer"}
+
+type rootTimerTickMsg struct{}
+
+func rootTimerTick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return rootTimerTickMsg{}
+	})
+}
 
 // Model is the root TUI scaffold model.
 type Model struct {
@@ -38,6 +47,8 @@ type Model struct {
 
 	entriesErr string
 	reportErr  string
+
+	timerTickScheduled bool
 }
 
 // NewModel creates a new root TUI model.
@@ -81,15 +92,16 @@ func NewModelWithConfig(cfg config.Config) (*Model, error) {
 
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd {
-	if m.activeTab == tabTimer && m.timer.state.Running {
-		return timerTick()
-	}
-	return nil
+	return m.startRootTimerTicker()
 }
 
 // Update implements tea.Model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case rootTimerTickMsg:
+		m.timerTickScheduled = false
+		return m, m.startRootTimerTicker()
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -224,10 +236,7 @@ func newFallbackTimerModel(status string) TimerModel {
 
 func (m *Model) switchTab(next tab) tea.Cmd {
 	m.activeTab = next
-	if m.activeTab == tabTimer && m.timer.state.Running {
-		return timerTick()
-	}
-	return nil
+	return m.startRootTimerTicker()
 }
 
 func (m *Model) bodySize() (width int, height int) {
@@ -260,12 +269,24 @@ func (m *Model) updateActiveTab(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.report = updated
 		return m, cmd
 	case tabTimer:
-		updatedModel, cmd := m.timer.Update(msg)
+		updatedModel, _ := m.timer.Update(msg)
 		if updated, ok := updatedModel.(TimerModel); ok {
 			m.timer = updated
 		}
-		return m, cmd
+		return m, m.startRootTimerTicker()
 	default:
 		return m, nil
 	}
+}
+
+func (m *Model) startRootTimerTicker() tea.Cmd {
+	if m.activeTab != tabTimer || !m.timer.state.Running {
+		return nil
+	}
+	if m.timerTickScheduled {
+		return nil
+	}
+
+	m.timerTickScheduled = true
+	return rootTimerTick()
 }
