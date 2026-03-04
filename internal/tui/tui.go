@@ -230,9 +230,9 @@ func (m *Model) switchTab(next tab) tea.Cmd {
 	return nil
 }
 
-func (m *Model) bodySize() (int, int) {
-	width := m.width - 4
-	height := m.height - 6
+func (m *Model) bodySize() (width int, height int) {
+	width = m.width - 4
+	height = m.height - 6
 
 	if width < 20 {
 		width = m.width
