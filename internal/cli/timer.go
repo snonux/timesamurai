@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timr/internal/ascii"
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
-	tuiapp "codeberg.org/snonux/timr/internal/tui"
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/ascii"
+	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
+	tuiapp "codeberg.org/snonux/timesamurai/internal/tui"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
@@ -44,7 +44,7 @@ func newTimerStartCmd() *cobra.Command {
 				return err
 			}
 
-			output, err := timrTimer.StartTimer(hasElapsed)
+			output, err := timesamuraiTimer.StartTimer(hasElapsed)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func newTimerStopCmd() *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			output, err := timrTimer.StopTimer()
+			output, err := timesamuraiTimer.StopTimer()
 			if err != nil {
 				return fmt.Errorf("stop timer: %w", err)
 			}
@@ -85,7 +85,7 @@ func newTimerContinueCmd() *cobra.Command {
 
 			output := "Timer is at 0, cannot continue."
 			if hasElapsed {
-				output, err = timrTimer.StartTimer(true)
+				output, err = timesamuraiTimer.StartTimer(true)
 				if err != nil {
 					return err
 				}
@@ -101,7 +101,7 @@ func newTimerResetCmd() *cobra.Command {
 		Use:   "reset",
 		Short: "Reset the timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			output, err := timrTimer.ResetTimer()
+			output, err := timesamuraiTimer.ResetTimer()
 			if err != nil {
 				return fmt.Errorf("reset timer: %w", err)
 			}
@@ -129,11 +129,11 @@ func newTimerStatusCmd() *cobra.Command {
 
 			switch {
 			case raw:
-				output, err = timrTimer.GetRawStatus()
+				output, err = timesamuraiTimer.GetRawStatus()
 			case rawMinutes:
-				output, err = timrTimer.GetRawMinutesStatus()
+				output, err = timesamuraiTimer.GetRawMinutesStatus()
 			default:
-				output, err = timrTimer.GetStatus()
+				output, err = timesamuraiTimer.GetStatus()
 			}
 			if err != nil {
 				return err
@@ -153,7 +153,7 @@ func newTimerPromptCmd() *cobra.Command {
 		Use:   "prompt",
 		Short: "Show prompt-friendly timer status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			output, err := timrTimer.GetPromptStatus()
+			output, err := timesamuraiTimer.GetPromptStatus()
 			if err != nil {
 				return fmt.Errorf("get prompt timer status: %w", err)
 			}
@@ -169,7 +169,7 @@ func newTimerTrackCmd() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			description := strings.Join(args, " ")
-			output, err := timrTimer.TrackTime(description)
+			output, err := timesamuraiTimer.TrackTime(description)
 			if err != nil {
 				return fmt.Errorf("track timer entry %q: %w", description, err)
 			}
@@ -242,7 +242,7 @@ func syncWorktimeWithTimer(cmd *cobra.Command, start bool) error {
 }
 
 func timerHasElapsed() (bool, error) {
-	rawStatus, err := timrTimer.GetRawStatus()
+	rawStatus, err := timesamuraiTimer.GetRawStatus()
 	if err != nil {
 		return false, fmt.Errorf("get raw timer status: %w", err)
 	}

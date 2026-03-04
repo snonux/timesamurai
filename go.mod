@@ -1,4 +1,4 @@
-module codeberg.org/snonux/timr
+module codeberg.org/snonux/timesamurai
 
 go 1.24.3
 

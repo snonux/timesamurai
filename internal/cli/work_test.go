@@ -7,8 +7,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
+	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 )
 
 func TestWorkLoginStatusLogoutFlow(t *testing.T) {
@@ -87,7 +89,7 @@ func TestWorkLoginLogoutWithTimerFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("work login --start-timer error = %v (output: %q)", err, out)
 	}
-	state, err := timrTimer.LoadState()
+	state, err := timesamuraiTimer.LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
@@ -99,12 +101,48 @@ func TestWorkLoginLogoutWithTimerFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("work logout --stop-timer error = %v (output: %q)", err, out)
 	}
-	state, err = timrTimer.LoadState()
+	state, err = timesamuraiTimer.LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
 	if state.Running {
 		t.Fatal("timer should be stopped after --stop-timer")
+	}
+}
+
+func TestWorkDayOffCommand(t *testing.T) {
+	dbDir := t.TempDir()
+	host := "host-day-off"
+	cfgPath := writeWorkConfig(t, dbDir, host)
+
+	out, err := runRootCommand("--config", cfgPath, "work", "day-off", "--at", "2026-02-17", "--descr", "vacation")
+	if err != nil {
+		t.Fatalf("work day-off error = %v (output: %q)", err, out)
+	}
+	if !strings.Contains(out, "Added day off: 8h on 2026-02-17") {
+		t.Fatalf("unexpected day-off output: %q", out)
+	}
+
+	db, err := worktime.LoadHost(dbDir, host)
+	if err != nil {
+		t.Fatalf("LoadHost() error = %v", err)
+	}
+
+	entries := db.Entries[host]
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+
+	entry := entries[0]
+	wantEpoch := time.Date(2026, 2, 17, 0, 0, 0, 0, time.Local).Unix()
+	if entry.Action != "add" || entry.What != "off" {
+		t.Fatalf("unexpected day-off entry: %+v", entry)
+	}
+	if entry.Value != 8*3600 {
+		t.Fatalf("day-off value = %d, want 28800", entry.Value)
+	}
+	if entry.Epoch != wantEpoch {
+		t.Fatalf("day-off epoch = %d, want %d", entry.Epoch, wantEpoch)
 	}
 }
 

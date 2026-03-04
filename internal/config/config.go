@@ -11,7 +11,7 @@ import (
 const (
 	defaultWeekWorkHours = 40.0
 	defaultWorktimeDBDir = "~/git/worktime"
-	configDirName        = "timr"
+	configDirName        = "timesamurai"
 	configFileName       = "config.json"
 )
 

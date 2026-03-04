@@ -1,13 +1,13 @@
-# timr
+# timesamurai
 
-`timr` is a terminal time-tracking tool that combines:
+`timesamurai` is a terminal time-tracking tool that combines:
 
 - a stopwatch timer,
 - worktime-style work log tracking,
 - weekly reporting,
 - and a Bubble Tea TUI.
 
-Current version: `v0.4.0`.
+Current version: `v0.5.0`.
 
 ## Installation
 
@@ -26,49 +26,50 @@ mage build
 Or build directly:
 
 ```bash
-go build -o timr ./cmd/timr
+go build -o timesamurai ./cmd/timesamurai
 ```
 
 ## CLI Overview
 
-`timr` now uses Cobra and supports global flags:
+`timesamurai` now uses Cobra and supports global flags:
 
 ```bash
-timr --version
-timr --config /path/to/config.json
+timesamurai --version
+timesamurai --config /path/to/config.json
 ```
 
 Top-level command groups:
 
-- `timr timer ...`
-- `timr work ...`
-- `timr tui`
+- `timesamurai timer ...`
+- `timesamurai work ...`
+- `timesamurai tui`
 
 ### `timer` Commands
 
 ```bash
-timr timer start
-timr timer stop
-timr timer continue
-timr timer reset
-timr timer status [--raw|--raw-minutes]
-timr timer prompt
-timr timer track <description>
-timr timer live [-f|--font <font>]
+timesamurai timer start
+timesamurai timer stop
+timesamurai timer continue
+timesamurai timer reset
+timesamurai timer status [--raw|--raw-minutes]
+timesamurai timer prompt
+timesamurai timer track <description>
+timesamurai timer live [-f|--font <font>]
 ```
 
 ### `work` Commands
 
 ```bash
-timr work login [-c|--category <cat>] [--at <time>] [-d|--descr <text>] [--start-timer]
-timr work logout [-c|--category <cat>] [--at <time>] [-d|--descr <text>] [--stop-timer]
-timr work add <duration> [-c|--category <cat>] [--at <time>] [-d|--descr <text>]
-timr work sub <duration> [-c|--category <cat>] [--at <time>] [-d|--descr <text>]
-timr work use-buffer <duration> [--at <time>] [-d|--descr <text>]
-timr work status
-timr work report [--verbose] [--no-color]
-timr work edit
-timr work import <file>
+timesamurai work login [-c|--category <cat>] [--at <time>] [-d|--descr <text>] [--start-timer]
+timesamurai work logout [-c|--category <cat>] [--at <time>] [-d|--descr <text>] [--stop-timer]
+timesamurai work add <duration> [-c|--category <cat>] [--at <time>] [-d|--descr <text>]
+timesamurai work sub <duration> [-c|--category <cat>] [--at <time>] [-d|--descr <text>]
+timesamurai work day-off [--at <time>] [-d|--descr <text>]
+timesamurai work use-buffer <duration> [--at <time>] [-d|--descr <text>]
+timesamurai work status
+timesamurai work report [--verbose] [--no-color]
+timesamurai work edit
+timesamurai work import <file>
 ```
 
 ## TUI
@@ -76,20 +77,23 @@ timr work import <file>
 Launch the TUI:
 
 ```bash
-timr tui
+timesamurai tui
+timesamurai tui --disco
 ```
 
-The scaffold currently includes:
+The TUI includes:
 
 - tab-based navigation (`Entries`, `Report`, `Timer`),
-- vi-style global keys (`Tab`, `gt`, `gT`, `1/2/3`, `?`, `q`, `ZQ`),
-- entries browsing/editing flows,
+- TaskSamurai-inspired table styling and status bars,
+- vi-style global keys (`Tab`, `gt`, `gT`, `1/2/3`, `?`/`H`, `q`, `ZQ`),
+- theme controls (`c` randomize theme, `C` reset, `x` toggle disco mode),
+- entries timeline table flows (navigate columns with `h/l` and press `Enter` to edit selected field, including date/time/value/description; `D` opens day-off datepicker),
 - report browsing,
 - timer screen with work login/logout toggle (`l`).
 
 ## TUI Screenshots
 
-Screenshots section (`v0.4.0` baseline):
+Screenshots section (`v0.5.0` baseline):
 
 - Entries screen: _to be captured_
 - Report screen: _to be captured_
@@ -103,4 +107,4 @@ Install fish prompt helper:
 ./install-fish-integration.fish
 ```
 
-Then add `timr_prompt` to your `fish_prompt` or `fish_right_prompt`.
+Then add `timesamurai_prompt` to your `fish_prompt` or `fish_right_prompt`.

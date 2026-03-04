@@ -1,2 +1,2 @@
-// Package duration parses CLI duration values used by timr commands.
+// Package duration parses CLI duration values used by timesamurai commands.
 package duration

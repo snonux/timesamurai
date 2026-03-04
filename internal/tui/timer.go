@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timr/internal/ascii"
-	"codeberg.org/snonux/timr/internal/config"
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/ascii"
+	"codeberg.org/snonux/timesamurai/internal/config"
+	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
@@ -24,7 +24,7 @@ func timerTick() tea.Cmd {
 
 // TimerModel is the timer screen model used inside the TUI.
 type TimerModel struct {
-	state       timrTimer.State
+	state       timesamuraiTimer.State
 	quitting    bool
 	helpStyle   lipgloss.Style
 	timerStyle  lipgloss.Style
@@ -47,7 +47,7 @@ type workIntegration struct {
 
 // NewTimerModel builds the timer screen model.
 func NewTimerModel(font string, cfg config.Config) (TimerModel, error) {
-	state, err := timrTimer.LoadState()
+	state, err := timesamuraiTimer.LoadState()
 	if err != nil {
 		return TimerModel{}, err
 	}
@@ -146,8 +146,8 @@ func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "r":
-			m.state = timrTimer.State{}
-			if _, err := timrTimer.ResetTimer(); err != nil {
+			m.state = timesamuraiTimer.State{}
+			if _, err := timesamuraiTimer.ResetTimer(); err != nil {
 				m.work.status = "reset error: " + err.Error()
 			}
 			return m, nil

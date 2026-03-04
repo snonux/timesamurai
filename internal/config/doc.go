@@ -1,2 +1,2 @@
-// Package config loads, saves, and defaults timr configuration values.
+// Package config loads, saves, and defaults timesamurai configuration values.
 package config

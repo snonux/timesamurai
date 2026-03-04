@@ -2,10 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -22,6 +23,85 @@ func TestEntriesModelSortsChronologically(t *testing.T) {
 	}
 	if model.visible[0].Epoch != 30 || model.visible[1].Epoch != 20 || model.visible[2].Epoch != 10 {
 		t.Fatalf("entries are not sorted descending by epoch: %+v", model.visible)
+	}
+}
+
+func TestEntriesViewRendersTimelineTableHeaders(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(2))
+	model.SetSize(140, 12)
+
+	view := model.View(DefaultStyles())
+	if !strings.Contains(view, "Date") || !strings.Contains(view, "Time") || !strings.Contains(view, "Description") {
+		t.Fatalf("timeline table headers missing from view: %q", view)
+	}
+}
+
+func TestEntriesColumnNavigationKeys(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.SetSize(120, 12)
+
+	if model.selectedColumn != entriesColumnDescription {
+		t.Fatalf("selectedColumn = %d, want %d", model.selectedColumn, entriesColumnDescription)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if model.selectedColumn != entriesColumnSource {
+		t.Fatalf("selectedColumn after left = %d, want %d", model.selectedColumn, entriesColumnSource)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if model.selectedColumn != entriesColumnValue {
+		t.Fatalf("selectedColumn after h = %d, want %d", model.selectedColumn, entriesColumnValue)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if model.selectedColumn != entriesColumnSource {
+		t.Fatalf("selectedColumn after l = %d, want %d", model.selectedColumn, entriesColumnSource)
+	}
+}
+
+func TestEntriesEnterEditsSelectedColumnValue(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.SetSize(120, 12)
+	model.selectedColumn = entriesColumnValue
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !model.editMode {
+		t.Fatal("editMode = false, want true after Enter on value column")
+	}
+	if model.editField != entryEditFieldValue {
+		t.Fatalf("editField = %d, want %d", model.editField, entryEditFieldValue)
+	}
+}
+
+func TestEntriesEnterEditsSelectedColumnDateAndTime(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.SetSize(120, 12)
+
+	original := model.visible[0].Epoch
+
+	model.selectedColumn = entriesColumnDate
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !model.editMode || model.editField != entryEditFieldDate {
+		t.Fatalf("date edit not entered: editMode=%t editField=%d", model.editMode, model.editField)
+	}
+	model.input = "2026-02-02"
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.visible[0].Epoch == original {
+		t.Fatal("epoch did not change after date edit")
+	}
+
+	model.selectedColumn = entriesColumnTime
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !model.editMode || model.editField != entryEditFieldTime {
+		t.Fatalf("time edit not entered: editMode=%t editField=%d", model.editMode, model.editField)
+	}
+	model.input = "13:45"
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	updatedTime := time.Unix(model.visible[0].Epoch, 0)
+	if updatedTime.Hour() != 13 || updatedTime.Minute() != 45 {
+		t.Fatalf("time after edit = %s, want 13:45", updatedTime.Format("15:04"))
 	}
 }
 
@@ -228,7 +308,7 @@ func TestEntriesDeletePersistsToDB(t *testing.T) {
 	}
 
 	model := NewEntriesModel(entries)
-	model.SetPersistence(dbDir)
+	model.SetPersistence(dbDir, host)
 	model.SetSize(120, 12)
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -238,13 +318,124 @@ func TestEntriesDeletePersistsToDB(t *testing.T) {
 	if len(model.visible) != 2 {
 		t.Fatalf("entries len = %d, want 2 after persisted delete", len(model.visible))
 	}
+	if !model.hasUnsavedChanges() {
+		t.Fatal("hasUnsavedChanges = false, want true after delete before save")
+	}
 
 	reloaded, err := worktime.LoadHost(dbDir, host)
 	if err != nil {
 		t.Fatalf("LoadHost() error = %v", err)
 	}
+	if len(reloaded.Entries[host]) != 3 {
+		t.Fatalf("host entries len before save = %d, want 3", len(reloaded.Entries[host]))
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if model.hasUnsavedChanges() {
+		t.Fatal("hasUnsavedChanges = true, want false after save")
+	}
+
+	reloaded, err = worktime.LoadHost(dbDir, host)
+	if err != nil {
+		t.Fatalf("LoadHost() error = %v", err)
+	}
 	if len(reloaded.Entries[host]) != 2 {
-		t.Fatalf("host entries len = %d, want 2", len(reloaded.Entries[host]))
+		t.Fatalf("host entries len after save = %d, want 2", len(reloaded.Entries[host]))
+	}
+}
+
+func TestEntriesDayOffPromptPersistsToDB(t *testing.T) {
+	dbDir := t.TempDir()
+	host := "host-a"
+
+	db := worktime.Database{
+		Entries: map[string][]worktime.Entry{
+			host: {},
+		},
+	}
+	if err := worktime.SaveHost(dbDir, host, db); err != nil {
+		t.Fatalf("SaveHost() error = %v", err)
+	}
+
+	model := NewEntriesModel(nil)
+	model.SetPersistence(dbDir, host)
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	if !model.dayOffMode {
+		t.Fatal("dayOffMode = false, want true after D")
+	}
+
+	model.dayOffDate = time.Date(2026, 1, 22, 12, 34, 0, 0, time.Local)
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.dayOffMode {
+		t.Fatal("dayOffMode = true, want false after Enter")
+	}
+	if !model.hasUnsavedChanges() {
+		t.Fatal("hasUnsavedChanges = false, want true after day off before save")
+	}
+
+	db, err := worktime.LoadHost(dbDir, host)
+	if err != nil {
+		t.Fatalf("LoadHost() error = %v", err)
+	}
+
+	entries := db.Entries[host]
+	if len(entries) != 0 {
+		t.Fatalf("entries len before save = %d, want 0", len(entries))
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if model.hasUnsavedChanges() {
+		t.Fatal("hasUnsavedChanges = true, want false after save")
+	}
+
+	db, err = worktime.LoadHost(dbDir, host)
+	if err != nil {
+		t.Fatalf("LoadHost() error = %v", err)
+	}
+
+	entries = db.Entries[host]
+	if len(entries) != 1 {
+		t.Fatalf("entries len after save = %d, want 1", len(entries))
+	}
+
+	entry := entries[0]
+	wantEpoch := time.Date(2026, 1, 22, 0, 0, 0, 0, time.Local).Unix()
+	if entry.What != "off" || entry.Action != "add" {
+		t.Fatalf("unexpected day-off entry: %+v", entry)
+	}
+	if entry.Value != 8*3600 {
+		t.Fatalf("entry.Value = %d, want 28800", entry.Value)
+	}
+	if entry.Epoch != wantEpoch {
+		t.Fatalf("entry.Epoch = %d, want %d", entry.Epoch, wantEpoch)
+	}
+}
+
+func TestEntriesDayOffDatepickerNavigation(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.SetSize(120, 12)
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	if !model.dayOffMode {
+		t.Fatal("dayOffMode = false, want true after D")
+	}
+
+	model.dayOffDate = time.Date(2026, 2, 12, 0, 0, 0, 0, time.Local)
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if !sameDay(model.dayOffDate, time.Date(2026, 2, 13, 0, 0, 0, 0, time.Local)) {
+		t.Fatalf("dayOffDate after right = %v, want 2026-02-13", model.dayOffDate)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if !sameDay(model.dayOffDate, time.Date(2026, 2, 20, 0, 0, 0, 0, time.Local)) {
+		t.Fatalf("dayOffDate after down = %v, want 2026-02-20", model.dayOffDate)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	if !sameDay(model.dayOffDate, time.Date(2026, 1, 20, 0, 0, 0, 0, time.Local)) {
+		t.Fatalf("dayOffDate after pgup = %v, want 2026-01-20", model.dayOffDate)
 	}
 }
 

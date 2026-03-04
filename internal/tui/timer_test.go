@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"codeberg.org/snonux/timr/internal/config"
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/config"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

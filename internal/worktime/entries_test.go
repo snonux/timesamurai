@@ -115,6 +115,28 @@ func TestAddSubAndUseBuffer(t *testing.T) {
 	}
 }
 
+func TestAddDayOff(t *testing.T) {
+	dbDir := t.TempDir()
+	host := "host-a"
+
+	day := time.Date(2026, time.January, 12, 16, 30, 0, 0, time.Local)
+	entry, err := AddDayOff(dbDir, host, day, "vacation")
+	if err != nil {
+		t.Fatalf("AddDayOff() error = %v", err)
+	}
+
+	wantDayStart := time.Date(2026, time.January, 12, 0, 0, 0, 0, time.Local)
+	if entry.What != "off" {
+		t.Fatalf("entry.What = %q, want off", entry.What)
+	}
+	if entry.Value != 8*3600 {
+		t.Fatalf("entry.Value = %d, want 28800", entry.Value)
+	}
+	if entry.Epoch != wantDayStart.Unix() {
+		t.Fatalf("entry.Epoch = %d, want %d", entry.Epoch, wantDayStart.Unix())
+	}
+}
+
 func TestDurationValidation(t *testing.T) {
 	dbDir := t.TempDir()
 	host := "host-a"

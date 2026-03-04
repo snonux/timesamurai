@@ -1,2 +1,2 @@
-// Package timefmt parses timestamp inputs accepted by timr commands.
+// Package timefmt parses timestamp inputs accepted by timesamurai commands.
 package timefmt

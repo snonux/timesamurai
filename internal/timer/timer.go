@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	stateFile = ".timr_state"
+	stateFile = ".timesamurai_state"
 )
 
 // State stores persisted timer progress.
@@ -29,7 +29,7 @@ func resolveStateFilePath(path string) (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(configDir, "timr", stateFile), nil
+	return filepath.Join(configDir, "timesamurai", stateFile), nil
 }
 
 // GetStateFile returns the default state file path.

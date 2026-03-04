@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"codeberg.org/snonux/timr/internal/config"
+	"codeberg.org/snonux/timesamurai/internal/config"
 )
 
 func TestDefaultPublicAPI(t *testing.T) {

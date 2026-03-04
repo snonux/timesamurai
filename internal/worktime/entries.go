@@ -12,6 +12,7 @@ const (
 	actionLogin  = "login"
 	actionLogout = "logout"
 	actionAdd    = "add"
+	dayOffHours  = 8
 )
 
 var (
@@ -74,6 +75,11 @@ func Add(dbDir, hostname, category string, duration time.Duration, at time.Time,
 	cat := normalizeCategory(category)
 	entry := newEntry(actionAdd, host, cat, at, durationToSeconds(duration), descr)
 	return appendHostEntry(dbDir, host, entry)
+}
+
+// AddDayOff creates an 8-hour day-off entry for the provided day.
+func AddDayOff(dbDir, hostname string, day time.Time, descr string) (Entry, error) {
+	return Add(dbDir, hostname, "off", time.Duration(dayOffHours)*time.Hour, startOfDay(day), descr)
 }
 
 // Sub creates an add entry with a negative duration value.
@@ -139,6 +145,15 @@ func EditEntry(dbDir, hostname string, index int, replacement Entry) (Entry, err
 	}
 
 	return normalized, nil
+}
+
+// NormalizeEditedEntry validates and normalizes an edited entry for a host without persisting it.
+func NormalizeEditedEntry(entry Entry, hostname string) (Entry, error) {
+	host, err := normalizeHostname(hostname)
+	if err != nil {
+		return Entry{}, err
+	}
+	return normalizeEditedEntry(entry, host)
 }
 
 // DeleteEntry removes an entry by index from the host database.
@@ -228,6 +243,12 @@ func normalizeCategory(category string) string {
 
 func durationToSeconds(duration time.Duration) int64 {
 	return int64(duration / time.Second)
+}
+
+func startOfDay(value time.Time) time.Time {
+	effective := effectiveTime(value)
+	year, month, day := effective.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, effective.Location())
 }
 
 func effectiveTime(at time.Time) time.Time {

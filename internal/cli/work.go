@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timr/internal/duration"
-	"codeberg.org/snonux/timr/internal/timefmt"
-	timrTimer "codeberg.org/snonux/timr/internal/timer"
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/duration"
+	"codeberg.org/snonux/timesamurai/internal/timefmt"
+	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +32,7 @@ func newWorkCmd() *cobra.Command {
 	cmd.AddCommand(newWorkLogoutCmd())
 	cmd.AddCommand(newWorkAddCmd())
 	cmd.AddCommand(newWorkSubCmd())
+	cmd.AddCommand(newWorkDayOffCmd())
 	cmd.AddCommand(newWorkUseBufferCmd())
 	cmd.AddCommand(newWorkReportCmd())
 	cmd.AddCommand(newWorkStatusCmd())
@@ -207,6 +208,39 @@ func newWorkSubCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&category, "category", "c", "work", "Category")
 	cmd.Flags().StringVar(&at, "at", "", "Timestamp override (unix, ISO, today, yesterday)")
+	cmd.Flags().StringVarP(&descr, "descr", "d", "", "Description")
+	return cmd
+}
+
+func newWorkDayOffCmd() *cobra.Command {
+	var at string
+	var descr string
+
+	cmd := &cobra.Command{
+		Use:   "day-off",
+		Short: "Add an 8-hour day-off entry",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := resolveWorkContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			day, err := parseAtOrNow(at)
+			if err != nil {
+				return err
+			}
+
+			entry, err := worktime.AddDayOff(ctx.dbDir, ctx.host, day, descr)
+			if err != nil {
+				return err
+			}
+
+			dayLabel := time.Unix(entry.Epoch, 0).Format("2006-01-02")
+			return printOutput(cmd, fmt.Sprintf("Added day off: 8h on %s", dayLabel))
+		},
+	}
+
+	cmd.Flags().StringVar(&at, "at", "", "Date/time override (unix, ISO, today, yesterday)")
 	cmd.Flags().StringVarP(&descr, "descr", "d", "", "Description")
 	return cmd
 }
@@ -407,9 +441,9 @@ func startTimerFromWorkCommand() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return timrTimer.StartTimer(hasElapsed)
+	return timesamuraiTimer.StartTimer(hasElapsed)
 }
 
 func stopTimerFromWorkCommand() (string, error) {
-	return timrTimer.StopTimer()
+	return timesamuraiTimer.StopTimer()
 }

@@ -25,4 +25,9 @@ func TestNewTUICmdMetadata(t *testing.T) {
 	if cmd.Short == "" {
 		t.Fatal("Short description should not be empty")
 	}
+
+	flag := cmd.Flags().Lookup("disco")
+	if flag == nil {
+		t.Fatal("expected --disco flag to be defined")
+	}
 }

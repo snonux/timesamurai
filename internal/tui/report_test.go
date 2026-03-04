@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -79,6 +79,17 @@ func TestReportSummaryBarInView(t *testing.T) {
 	}
 	if !strings.Contains(view, "Buffer:") {
 		t.Fatalf("view missing summary buffer: %q", view)
+	}
+}
+
+func TestReportWarningInView(t *testing.T) {
+	model := NewReportModel(sampleWeeks())
+	model.SetWarning("currently logged in: work")
+	model.SetSize(120, 12)
+
+	view := model.View(DefaultStyles())
+	if !strings.Contains(view, "Warning: currently logged in: work") {
+		t.Fatalf("view missing warning: %q", view)
 	}
 }
 

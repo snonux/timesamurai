@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"codeberg.org/snonux/timr/internal/cli"
+	"codeberg.org/snonux/timesamurai/internal/cli"
 )
 
 func main() {

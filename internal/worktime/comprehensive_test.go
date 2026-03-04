@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timr/internal/config"
+	"codeberg.org/snonux/timesamurai/internal/config"
 )
 
 func TestComprehensiveDBRoundTripAndReportFixture(t *testing.T) {

@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"codeberg.org/snonux/timr/internal/worktime"
+	"codeberg.org/snonux/timesamurai/internal/worktime"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ReportModel is a weekly report browser screen.
 type ReportModel struct {
 	weeks []worktime.WeekReport
+	warn  string
 
 	weekIndex int
 	cursor    int
@@ -56,6 +57,11 @@ func (m *ReportModel) SetWeeks(weeks []worktime.WeekReport) {
 	}
 	m.cursor = 0
 	m.offset = 0
+}
+
+// SetWarning sets a status warning shown at the bottom of the report view.
+func (m *ReportModel) SetWarning(warning string) {
+	m.warn = strings.TrimSpace(warning)
 }
 
 // Update handles keyboard interaction.
@@ -150,6 +156,9 @@ func (m *ReportModel) View(styles Styles) string {
 	hint := "j/k scroll, gg/G top/bottom, ]w/[w week nav, v verbose"
 
 	body := header + "\n\n" + strings.Join(lines, "\n") + "\n\n" + summary + "\n" + hint
+	if m.warn != "" {
+		body += "\n" + styles.Warning.Render("Warning: "+m.warn)
+	}
 	return styles.Body.Render(body)
 }
 

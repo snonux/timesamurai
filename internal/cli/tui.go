@@ -1,17 +1,19 @@
 package cli
 
 import (
-	tuiapp "codeberg.org/snonux/timr/internal/tui"
+	tuiapp "codeberg.org/snonux/timesamurai/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
 func newTUICmd() *cobra.Command {
-	return &cobra.Command{
+	var disco bool
+
+	cmd := &cobra.Command{
 		Use:   "tui",
 		Short: "Launch full-screen TUI",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			model, err := tuiapp.NewModelWithConfig(currentConfig(cmd))
+			model, err := tuiapp.NewModelWithConfigAndDisco(currentConfig(cmd), disco)
 			if err != nil {
 				return err
 			}
@@ -19,4 +21,7 @@ func newTUICmd() *cobra.Command {
 			return program.Start()
 		},
 	}
+
+	cmd.Flags().BoolVar(&disco, "disco", false, "Enable disco mode (random theme changes)")
+	return cmd
 }
