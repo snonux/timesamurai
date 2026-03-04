@@ -7,7 +7,7 @@
 - weekly reporting,
 - and a Bubble Tea TUI.
 
-Current version: `v0.5.0`.
+Current version: `v0.5.1`.
 
 ## Installation
 
@@ -93,7 +93,7 @@ The TUI includes:
 
 ## TUI Screenshots
 
-Screenshots section (`v0.5.0` baseline):
+Screenshots section (`v0.5.1` baseline):
 
 - Entries screen: _to be captured_
 - Report screen: _to be captured_
