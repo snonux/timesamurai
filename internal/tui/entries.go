@@ -22,6 +22,15 @@ const (
 	entryEditFieldValue
 )
 
+var categoryColors = map[string]string{
+	"work":            "#8BD3DD",
+	"lunch":           "#F6BD60",
+	"off":             "#CDB4DB",
+	"bank":            "#A8DADC",
+	"sick":            "#FFB4A2",
+	"selfdevelopment": "#B8E1A9",
+}
+
 // EntriesModel is a chronological worktime entry browser.
 type EntriesModel struct {
 	allEntries []worktime.Entry
@@ -343,17 +352,8 @@ func (m *EntriesModel) applyFilters() {
 		if filter != "" && !strings.Contains(strings.ToLower(entry.What), filter) {
 			continue
 		}
-		if search != "" {
-			joined := strings.ToLower(strings.Join([]string{
-				entry.Action,
-				entry.What,
-				entry.Source,
-				entry.Human,
-				entry.Descr,
-			}, " "))
-			if !strings.Contains(joined, search) {
-				continue
-			}
+		if search != "" && !entryMatchesSearch(entry, search) {
+			continue
 		}
 		m.visible = append(m.visible, entry)
 	}
@@ -631,16 +631,7 @@ func colorizeCategory(category string) string {
 		category = "work"
 	}
 
-	colors := map[string]string{
-		"work":            "#8BD3DD",
-		"lunch":           "#F6BD60",
-		"off":             "#CDB4DB",
-		"bank":            "#A8DADC",
-		"sick":            "#FFB4A2",
-		"selfdevelopment": "#B8E1A9",
-	}
-
-	color, ok := colors[category]
+	color, ok := categoryColors[category]
 	if !ok {
 		color = "#D9D9D9"
 	}
@@ -656,7 +647,7 @@ func minInt(a, b int) int {
 
 func findEntryIndex(entries []worktime.Entry, target worktime.Entry) int {
 	for idx, entry := range entries {
-		if entry == target {
+		if sameEntryIdentity(entry, target) {
 			return idx
 		}
 	}
@@ -671,7 +662,7 @@ func findHostEntryIndex(dbDir, host string, target worktime.Entry) (int, error) 
 
 	entries := db.Entries[host]
 	for idx, entry := range entries {
-		if entry == target {
+		if sameEntryIdentity(entry, target) {
 			return idx, nil
 		}
 	}
@@ -704,4 +695,16 @@ func trimLastRune(value string) string {
 	}
 
 	return value[:len(value)-size]
+}
+
+func entryMatchesSearch(entry worktime.Entry, search string) bool {
+	return strings.Contains(strings.ToLower(entry.Action), search) ||
+		strings.Contains(strings.ToLower(entry.What), search) ||
+		strings.Contains(strings.ToLower(entry.Source), search) ||
+		strings.Contains(strings.ToLower(entry.Human), search) ||
+		strings.Contains(strings.ToLower(entry.Descr), search)
+}
+
+func sameEntryIdentity(a, b worktime.Entry) bool {
+	return a.Epoch == b.Epoch && a.Action == b.Action && a.Source == b.Source
 }
