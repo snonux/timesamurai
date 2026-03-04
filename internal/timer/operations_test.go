@@ -74,7 +74,14 @@ func TestStopTimer(t *testing.T) {
 
 	// Start and then stop the timer
 	_, _ = StartTimer(false)
-	time.Sleep(10 * time.Millisecond) // Simulate work
+	state, err := LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() after StartTimer error = %v", err)
+	}
+	state.StartTime = time.Now().Add(-10 * time.Millisecond)
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() after StartTimer error = %v", err)
+	}
 	msg, err = StopTimer()
 	if err != nil {
 		t.Fatalf("StopTimer() error = %v", err)
@@ -84,7 +91,7 @@ func TestStopTimer(t *testing.T) {
 	}
 
 	// Check the state
-	state, err := LoadState()
+	state, err = LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
