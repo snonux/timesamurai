@@ -202,6 +202,44 @@ func TestEntriesEditFlow(t *testing.T) {
 	}
 }
 
+func TestEntriesEditModeAcceptsSpaceKey(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.editMode = true
+	model.input = "hello"
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if model.input != "hello " {
+		t.Fatalf("input after space = %q, want %q", model.input, "hello ")
+	}
+}
+
+func TestEntriesValueShowsSessionDurationForLoginLogoutPairs(t *testing.T) {
+	entries := []worktime.Entry{
+		{
+			Action: "login",
+			What:   "work",
+			Epoch:  localEpoch(2026, 1, 5, 9),
+			Source: "host-a",
+			Human:  time.Unix(localEpoch(2026, 1, 5, 9), 0).Format("Mon 02.01.2006 15:04:05"),
+		},
+		{
+			Action: "logout",
+			What:   "work",
+			Epoch:  localEpoch(2026, 1, 5, 11),
+			Source: "host-a",
+			Human:  time.Unix(localEpoch(2026, 1, 5, 11), 0).Format("Mon 02.01.2006 15:04:05"),
+		},
+	}
+
+	model := NewEntriesModel(entries)
+	model.SetSize(120, 12)
+
+	table := model.renderTimelineTable(DefaultStyles())
+	if count := strings.Count(table, "+2.00h"); count != 2 {
+		t.Fatalf("rendered session duration count = %d, want 2 in table:\n%s", count, table)
+	}
+}
+
 func TestEntriesValueEditFlow(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(3))
 	model.SetSize(120, 12)

@@ -150,6 +150,10 @@ func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
 	return *m, nil
 }
 
+func (m EntriesModel) capturesTextInput() bool {
+	return m.editMode || m.searchMode || m.filterMode
+}
+
 func (m *EntriesModel) updateConfirmDelete(key string) bool {
 	if !m.confirmDelete {
 		return false
@@ -190,9 +194,7 @@ func (m *EntriesModel) updateEditMode(keyMsg tea.KeyMsg) bool {
 	case "backspace":
 		m.input = trimLastRune(m.input)
 	default:
-		if keyMsg.Type == tea.KeyRunes {
-			m.input += string(keyMsg.Runes)
-		}
+		m.input = appendInputKey(m.input, keyMsg)
 	}
 
 	return true
@@ -260,9 +262,7 @@ func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyMsg) bool {
 	case "backspace":
 		m.input = trimLastRune(m.input)
 	default:
-		if keyMsg.Type == tea.KeyRunes {
-			m.input += string(keyMsg.Runes)
-		}
+		m.input = appendInputKey(m.input, keyMsg)
 	}
 
 	return true
@@ -969,13 +969,76 @@ func (m *EntriesModel) pageSize() int {
 	return page
 }
 
-func formatEntryValue(entry worktime.Entry) string {
-	if entry.Action != "add" {
+func formatEntryValue(entry worktime.Entry, sessionDurations map[worktime.Entry]int64) string {
+	action := strings.ToLower(strings.TrimSpace(entry.Action))
+	switch action {
+	case "add":
+		hours := float64(entry.Value) / 3600
+		return fmt.Sprintf("%+.2fh", hours)
+	case "login", "logout":
+		span, ok := sessionDurations[entry]
+		if !ok || span <= 0 {
+			return "-"
+		}
+		hours := float64(span) / 3600
+		return fmt.Sprintf("+%.2fh", hours)
+	default:
 		return "-"
 	}
+}
 
-	hours := float64(entry.Value) / 3600
-	return fmt.Sprintf("%+.2fh", hours)
+func buildSessionDurations(entries []worktime.Entry) map[worktime.Entry]int64 {
+	if len(entries) == 0 {
+		return map[worktime.Entry]int64{}
+	}
+
+	sorted := append([]worktime.Entry(nil), entries...)
+	slices.SortFunc(sorted, func(a, b worktime.Entry) int {
+		if a.Epoch != b.Epoch {
+			if a.Epoch < b.Epoch {
+				return -1
+			}
+			return 1
+		}
+		if a.Source != b.Source {
+			return strings.Compare(a.Source, b.Source)
+		}
+		return strings.Compare(a.Action, b.Action)
+	})
+
+	activeByCategory := map[string]worktime.Entry{}
+	durations := map[worktime.Entry]int64{}
+	for _, entry := range sorted {
+		action := strings.ToLower(strings.TrimSpace(entry.Action))
+		category := normalizeEntryCategory(entry.What)
+
+		switch action {
+		case "login":
+			activeByCategory[category] = entry
+		case "logout":
+			loginEntry, ok := activeByCategory[category]
+			if !ok {
+				continue
+			}
+
+			span := entry.Epoch - loginEntry.Epoch
+			if span > 0 {
+				durations[loginEntry] = span
+				durations[entry] = span
+			}
+			delete(activeByCategory, category)
+		}
+	}
+
+	return durations
+}
+
+func normalizeEntryCategory(raw string) string {
+	category := strings.TrimSpace(raw)
+	if category == "" {
+		return "work"
+	}
+	return category
 }
 
 func minInt(a, b int) int {
@@ -1021,6 +1084,17 @@ func trimLastRune(value string) string {
 	return value[:len(value)-size]
 }
 
+func appendInputKey(input string, keyMsg tea.KeyMsg) string {
+	switch keyMsg.Type {
+	case tea.KeyRunes:
+		return input + string(keyMsg.Runes)
+	case tea.KeySpace:
+		return input + " "
+	default:
+		return input
+	}
+}
+
 func entryMatchesSearch(entry worktime.Entry, search string) bool {
 	return strings.Contains(strings.ToLower(entry.Action), search) ||
 		strings.Contains(strings.ToLower(entry.What), search) ||
@@ -1032,6 +1106,7 @@ func entryMatchesSearch(entry worktime.Entry, search string) bool {
 func (m *EntriesModel) renderTimelineTable(styles Styles) string {
 	widths := m.timelineColumnWidths()
 	headers := []string{"Date", "Time", "Action", "Category", "Value", "Source", "Description"}
+	sessionDurations := buildSessionDurations(m.allEntries)
 
 	headerStyles := make([]lipgloss.Style, len(headers))
 	for idx := range headers {
@@ -1055,7 +1130,7 @@ func (m *EntriesModel) renderTimelineTable(styles Styles) string {
 			moment.Format("15:04"),
 			entry.Action,
 			entry.What,
-			formatEntryValue(entry),
+			formatEntryValue(entry, sessionDurations),
 			entry.Source,
 			entry.Descr,
 		}

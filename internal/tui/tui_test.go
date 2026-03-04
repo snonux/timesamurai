@@ -34,6 +34,28 @@ func TestTabNavigation(t *testing.T) {
 	}
 }
 
+func TestEntriesTextEditingIgnoresRootGlobalShortcuts(t *testing.T) {
+	model := newRootModelForTest(t)
+
+	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	model = modelAny.(*Model)
+	if !model.entries.editMode {
+		t.Fatal("entries.editMode = false, want true after o")
+	}
+
+	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	model = modelAny.(*Model)
+	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	model = modelAny.(*Model)
+
+	if model.entries.input != "g " {
+		t.Fatalf("entries.input = %q, want %q", model.entries.input, "g ")
+	}
+	if model.activeTab != tabEntries {
+		t.Fatalf("activeTab = %v, want %v", model.activeTab, tabEntries)
+	}
+}
+
 func TestHelpToggle(t *testing.T) {
 	model := newRootModelForTest(t)
 

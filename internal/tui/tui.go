@@ -137,6 +137,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+		entriesCapturingText := m.activeTab == tabEntries && m.entries.capturesTextInput()
 
 		if m.confirmQuit {
 			switch key {
@@ -159,6 +160,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		if entriesCapturingText {
+			m.pendingG = false
+		}
+
 		if m.pendingZ {
 			m.pendingZ = false
 			if key == "Q" {
@@ -166,7 +171,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if m.pendingG {
+		if m.pendingG && !entriesCapturingText {
 			m.pendingG = false
 			switch key {
 			case "t":
@@ -206,6 +211,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "g":
+			if entriesCapturingText {
+				break
+			}
 			m.pendingG = true
 			return m, nil
 		case "Z":

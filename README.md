@@ -7,7 +7,7 @@
 - weekly reporting,
 - and a Bubble Tea TUI.
 
-Current version: `v0.5.1`.
+Current version: `v0.6.0`.
 
 ## Installation
 
