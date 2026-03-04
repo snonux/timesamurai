@@ -103,3 +103,23 @@ func TestParseInvalidValues(t *testing.T) {
 		})
 	}
 }
+
+func FuzzParseAt(f *testing.F) {
+	seeds := []string{
+		"today",
+		"yesterday",
+		"2024-01-15",
+		"2024-01-15T09:30",
+		"1714424400",
+		"banana",
+		"",
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	now := time.Date(2026, 3, 3, 12, 0, 0, 0, time.Local)
+	f.Fuzz(func(t *testing.T, input string) {
+		_, _ = ParseAt(input, now)
+	})
+}

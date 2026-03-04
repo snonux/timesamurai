@@ -78,3 +78,21 @@ func TestParseInvalidDurations(t *testing.T) {
 		})
 	}
 }
+
+func FuzzParse(f *testing.F) {
+	seeds := []string{
+		"1h30m",
+		"3600",
+		"-60",
+		"abc",
+		"",
+		"   ",
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		_, _ = Parse(input)
+	})
+}
