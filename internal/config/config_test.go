@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+func skipIOHeavyInShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping filesystem-heavy config tests in short mode")
+	}
+}
+
 func TestDefault(t *testing.T) {
 	cfg := Default()
 
@@ -45,6 +52,7 @@ func TestDefault(t *testing.T) {
 }
 
 func TestLoadMissingFileReturnsDefaults(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -65,6 +73,7 @@ func TestLoadMissingFileReturnsDefaults(t *testing.T) {
 }
 
 func TestLoadAppliesDefaultsAndExpandsWorktimeDir(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -102,6 +111,7 @@ func TestLoadAppliesDefaultsAndExpandsWorktimeDir(t *testing.T) {
 }
 
 func TestLoadPreservesExplicitEmptyLists(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -127,6 +137,7 @@ func TestLoadPreservesExplicitEmptyLists(t *testing.T) {
 }
 
 func TestLoadInvalidJSON(t *testing.T) {
+	skipIOHeavyInShort(t)
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(cfgPath, []byte(`{"weekworkhours":`), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -143,6 +154,7 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -194,6 +206,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 }
 
 func TestSaveAndLoadUsingDefaultPath(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
@@ -239,6 +252,7 @@ func TestEffectiveHostnamePrefersConfigValue(t *testing.T) {
 }
 
 func TestEffectiveHostnameUsesOverrideFile(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -259,6 +273,7 @@ func TestEffectiveHostnameUsesOverrideFile(t *testing.T) {
 }
 
 func TestEffectiveHostnameFallsBackToOSHostname(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
@@ -279,6 +294,7 @@ func TestEffectiveHostnameFallsBackToOSHostname(t *testing.T) {
 }
 
 func TestEffectiveHostnameIgnoresEmptyOverride(t *testing.T) {
+	skipIOHeavyInShort(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 

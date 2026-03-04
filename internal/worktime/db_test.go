@@ -7,7 +7,15 @@ import (
 	"testing"
 )
 
+func skipIfShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping filesystem-heavy worktime db tests in short mode")
+	}
+}
+
 func TestLoadHostMissingFileReturnsEmptyDatabase(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 
 	db, err := LoadHost(dbDir, "host-a")
@@ -25,6 +33,7 @@ func TestLoadHostMissingFileReturnsEmptyDatabase(t *testing.T) {
 }
 
 func TestLoadHostRejectsEmptyHostname(t *testing.T) {
+	skipIfShort(t)
 	_, err := LoadHost(t.TempDir(), "")
 	if err == nil {
 		t.Fatal("LoadHost() error = nil, want error")
@@ -32,6 +41,7 @@ func TestLoadHostRejectsEmptyHostname(t *testing.T) {
 }
 
 func TestSaveHostRejectsEmptyHostname(t *testing.T) {
+	skipIfShort(t)
 	err := SaveHost(t.TempDir(), "  ", Database{})
 	if err == nil {
 		t.Fatal("SaveHost() error = nil, want error")
@@ -39,6 +49,7 @@ func TestSaveHostRejectsEmptyHostname(t *testing.T) {
 }
 
 func TestSaveHostAndLoadHostRoundTrip(t *testing.T) {
+	skipIfShort(t)
 	dbDir := filepath.Join(t.TempDir(), "nested", "db")
 	host := "workstation"
 
@@ -90,6 +101,7 @@ func TestSaveHostAndLoadHostRoundTrip(t *testing.T) {
 }
 
 func TestLoadAllMergesAndSortsEntries(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 
 	dbA := Database{
@@ -130,6 +142,7 @@ func TestLoadAllMergesAndSortsEntries(t *testing.T) {
 }
 
 func TestLoadAllBackfillsMissingSourceFromHost(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 	dbFile := filepath.Join(dbDir, "db.host-a.json")
 	content := `{
@@ -156,6 +169,7 @@ func TestLoadAllBackfillsMissingSourceFromHost(t *testing.T) {
 }
 
 func TestLoadAllOnMissingDirectoryReturnsEmptySlice(t *testing.T) {
+	skipIfShort(t)
 	dbDir := filepath.Join(t.TempDir(), "does-not-exist")
 
 	entries, err := LoadAll(dbDir)
@@ -169,6 +183,7 @@ func TestLoadAllOnMissingDirectoryReturnsEmptySlice(t *testing.T) {
 }
 
 func TestLoadHostInvalidJSON(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 	badFile := filepath.Join(dbDir, "db.host-a.json")
 	if err := os.WriteFile(badFile, []byte(`{"entries":`), 0o644); err != nil {
@@ -186,6 +201,7 @@ func TestLoadHostInvalidJSON(t *testing.T) {
 }
 
 func TestLoadAllAcceptsFloatValueEncoding(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 	dbFile := filepath.Join(dbDir, "db.host-a.json")
 	content := `{
@@ -212,6 +228,7 @@ func TestLoadAllAcceptsFloatValueEncoding(t *testing.T) {
 }
 
 func TestLoadAllInvalidJSON(t *testing.T) {
+	skipIfShort(t)
 	dbDir := t.TempDir()
 	badFile := filepath.Join(dbDir, "db.host-a.json")
 	if err := os.WriteFile(badFile, []byte(`{"entries":`), 0o644); err != nil {
@@ -225,6 +242,7 @@ func TestLoadAllInvalidJSON(t *testing.T) {
 }
 
 func TestLoadAllRejectsEmptyDirectory(t *testing.T) {
+	skipIfShort(t)
 	_, err := LoadAll("")
 	if err == nil {
 		t.Fatal("LoadAll() error = nil, want error")

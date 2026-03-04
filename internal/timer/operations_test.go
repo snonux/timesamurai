@@ -10,6 +10,9 @@ import (
 // setup sets up a temporary state file for testing.
 func setup(t *testing.T) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping timer integration-style tests in short mode")
+	}
 	tempDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
 	t.Setenv("HOME", tempDir)
