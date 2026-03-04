@@ -73,6 +73,7 @@ func TestParseISOValues(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseAt(test.input, now)
 			if err != nil {
 				t.Fatalf("ParseAt(%q) error = %v", test.input, err)
@@ -95,6 +96,7 @@ func TestParseInvalidValues(t *testing.T) {
 	for _, input := range inputs {
 		input := input
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
 			if _, err := ParseAt(input, time.Now()); err == nil {
 				t.Fatalf("ParseAt(%q) error = nil, want error", input)
 			}

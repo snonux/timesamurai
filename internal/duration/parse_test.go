@@ -46,6 +46,7 @@ func TestParseValidDurations(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := Parse(test.input)
 			if err != nil {
 				t.Fatalf("Parse(%q) error = %v", test.input, err)
@@ -70,6 +71,7 @@ func TestParseInvalidDurations(t *testing.T) {
 	for _, input := range tests {
 		input := input
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
 			if _, err := Parse(input); err == nil {
 				t.Fatalf("Parse(%q) error = nil, want error", input)
 			}
