@@ -86,7 +86,7 @@ func LoadAll(dbDir string) ([]Entry, error) {
 		return nil, fmt.Errorf("glob databases in %q: %w", dbDir, err)
 	}
 
-	entries := make([]Entry, 0)
+	var entries []Entry
 	for _, dbFile := range dbFiles {
 		db, err := loadDatabaseFile(dbFile)
 		if err != nil {

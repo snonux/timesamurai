@@ -407,7 +407,6 @@ func newDayAccumulator() dayAccumulator {
 func newWeekAccumulator() weekAccumulator {
 	return weekAccumulator{
 		values: map[string]int64{},
-		days:   []DayReport{},
 	}
 }
 
