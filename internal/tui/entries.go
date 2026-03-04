@@ -1064,7 +1064,7 @@ func (m *EntriesModel) renderTimelineTable(styles Styles) string {
 		for colIdx := range row {
 			cellStyles[colIdx] = styles.TableCell
 			if idx == m.cursor {
-				cellStyles[colIdx] = styles.TableCell.Copy().Bold(true)
+				cellStyles[colIdx] = styles.TableCell.Bold(true)
 				if entriesColumn(colIdx) == m.selectedColumn {
 					cellStyles[colIdx] = styles.TableSelected
 				}

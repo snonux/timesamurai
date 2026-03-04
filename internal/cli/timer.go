@@ -195,7 +195,8 @@ func newTimerLiveCmd() *cobra.Command {
 				return err
 			}
 			program := tea.NewProgram(model)
-			return program.Start()
+			_, err = program.Run()
+			return err
 		},
 	}
 

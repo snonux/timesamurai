@@ -3,7 +3,6 @@ package worktime
 import (
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"time"
 
@@ -289,7 +288,7 @@ func formatData(values map[string]int64, bufferSeconds int64, epoch int64, verbo
 	}
 
 	if verbose && epoch > 0 {
-		out.WriteString(fmt.Sprintf(" epoch:%d(%s)", epoch, time.Unix(epoch, 0)))
+		_, _ = fmt.Fprintf(&out, " epoch:%d(%s)", epoch, time.Unix(epoch, 0))
 	}
 
 	return out.String()
@@ -410,16 +409,4 @@ func newWeekAccumulator() weekAccumulator {
 	return weekAccumulator{
 		values: map[string]int64{},
 	}
-}
-
-func sortedWeekReports(reports []WeekReport) {
-	sort.SliceStable(reports, func(i, j int) bool {
-		if reports[i].WeekLabel != reports[j].WeekLabel {
-			return reports[i].WeekLabel < reports[j].WeekLabel
-		}
-		if len(reports[i].Days) == 0 || len(reports[j].Days) == 0 {
-			return len(reports[i].Days) < len(reports[j].Days)
-		}
-		return reports[i].Days[0].Epoch < reports[j].Days[0].Epoch
-	})
 }

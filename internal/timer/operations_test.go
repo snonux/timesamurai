@@ -241,11 +241,16 @@ func TestTrackTime(t *testing.T) {
 		tracker := &mockTracker{}
 
 		// Start timer and let it run for a bit
-		state, _ := LoadState()
+		state, err := LoadState()
+		if err != nil {
+			t.Fatalf("LoadState() error = %v", err)
+		}
 		state.Running = true
 		state.StartTime = time.Now().Add(-5 * time.Minute)
 		state.ElapsedTime = 0
-		state.Save()
+		if err := state.Save(); err != nil {
+			t.Fatalf("state.Save() error = %v", err)
+		}
 
 		msg, err := TrackTimeWithTracker("test description", tracker)
 		if err != nil {
@@ -261,7 +266,10 @@ func TestTrackTime(t *testing.T) {
 			t.Fatalf("tracker minutes = %d, want around 5", tracker.minutes)
 		}
 
-		state, _ = LoadState()
+		state, err = LoadState()
+		if err != nil {
+			t.Fatalf("LoadState() error = %v", err)
+		}
 		if state.Running || state.ElapsedTime != 0 {
 			t.Fatalf("state after tracking = %+v, want reset stopped state", state)
 		}
@@ -272,17 +280,25 @@ func TestTrackTime(t *testing.T) {
 		tracker := &mockTracker{err: errTestTracker}
 
 		// Set up a stopped timer with some elapsed time
-		state, _ := LoadState()
+		state, err := LoadState()
+		if err != nil {
+			t.Fatalf("LoadState() error = %v", err)
+		}
 		state.Running = false
 		state.ElapsedTime = 10 * time.Minute
-		state.Save()
+		if err := state.Save(); err != nil {
+			t.Fatalf("state.Save() error = %v", err)
+		}
 
-		_, err := TrackTimeWithTracker("another test", tracker)
+		_, err = TrackTimeWithTracker("another test", tracker)
 		if err == nil {
 			t.Fatal("TrackTimeWithTracker() error = nil, want tracker error")
 		}
 
-		state, _ = LoadState()
+		state, err = LoadState()
+		if err != nil {
+			t.Fatalf("LoadState() error = %v", err)
+		}
 		if state.Running {
 			t.Fatal("state.Running = true, want false after failed tracking")
 		}

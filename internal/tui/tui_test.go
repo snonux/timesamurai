@@ -76,8 +76,7 @@ func TestQuitKeys(t *testing.T) {
 
 	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
 	model = modelAny.(*Model)
-	modelAny, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
-	model = modelAny.(*Model)
+	_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
 	if cmd == nil {
 		t.Fatal("quit cmd is nil for ZQ")
 	}
