@@ -141,6 +141,28 @@ func TestEntriesValueEditFlow(t *testing.T) {
 	}
 }
 
+func TestEntriesBackspaceIsRuneSafeInEditMode(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.editMode = true
+	model.input = "aй"
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if model.input != "a" {
+		t.Fatalf("input after backspace = %q, want %q", model.input, "a")
+	}
+}
+
+func TestEntriesBackspaceIsRuneSafeInSearchMode(t *testing.T) {
+	model := NewEntriesModel(sampleEntries(1))
+	model.searchMode = true
+	model.input = "тест"
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if model.input != "тес" {
+		t.Fatalf("input after backspace = %q, want %q", model.input, "тес")
+	}
+}
+
 func TestEntriesDeleteWithConfirmation(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(3))
 	model.SetSize(120, 12)

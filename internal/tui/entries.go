@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"codeberg.org/snonux/timr/internal/duration"
 	"codeberg.org/snonux/timr/internal/worktime"
@@ -150,9 +151,7 @@ func (m *EntriesModel) updateEditMode(keyMsg tea.KeyMsg) bool {
 		m.editMode = false
 		m.input = ""
 	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
+		m.input = trimLastRune(m.input)
 	default:
 		if keyMsg.Type == tea.KeyRunes {
 			m.input += string(keyMsg.Runes)
@@ -183,9 +182,7 @@ func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyMsg) bool {
 		m.filterMode = false
 		m.input = ""
 	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
+		m.input = trimLastRune(m.input)
 	default:
 		if keyMsg.Type == tea.KeyRunes {
 			m.input += string(keyMsg.Runes)
@@ -694,4 +691,17 @@ func insertEntryAt(entries []worktime.Entry, idx int, entry worktime.Entry) []wo
 	copy(entries[idx+1:], entries[idx:])
 	entries[idx] = entry
 	return entries
+}
+
+func trimLastRune(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	_, size := utf8.DecodeLastRuneInString(value)
+	if size <= 0 {
+		return ""
+	}
+
+	return value[:len(value)-size]
 }
