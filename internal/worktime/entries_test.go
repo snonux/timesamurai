@@ -119,17 +119,47 @@ func TestDurationValidation(t *testing.T) {
 	dbDir := t.TempDir()
 	host := "host-a"
 
-	if _, err := Add(dbDir, host, "work", 0, time.Unix(100, 0), ""); err == nil {
-		t.Fatal("Add() accepted zero duration")
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{
+			name: "add zero duration",
+			run: func() error {
+				_, err := Add(dbDir, host, "work", 0, time.Unix(100, 0), "")
+				return err
+			},
+		},
+		{
+			name: "add negative duration",
+			run: func() error {
+				_, err := Add(dbDir, host, "work", -time.Minute, time.Unix(100, 0), "")
+				return err
+			},
+		},
+		{
+			name: "sub zero duration",
+			run: func() error {
+				_, err := Sub(dbDir, host, "work", 0, time.Unix(100, 0), "")
+				return err
+			},
+		},
+		{
+			name: "use buffer zero duration",
+			run: func() error {
+				_, err := UseBuffer(dbDir, host, 0, time.Unix(100, 0), "")
+				return err
+			},
+		},
 	}
-	if _, err := Add(dbDir, host, "work", -time.Minute, time.Unix(100, 0), ""); err == nil {
-		t.Fatal("Add() accepted negative duration")
-	}
-	if _, err := Sub(dbDir, host, "work", 0, time.Unix(100, 0), ""); err == nil {
-		t.Fatal("Sub() accepted zero duration")
-	}
-	if _, err := UseBuffer(dbDir, host, 0, time.Unix(100, 0), ""); err == nil {
-		t.Fatal("UseBuffer() accepted zero duration")
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.run(); err == nil {
+				t.Fatalf("%s: error = nil, want validation error", test.name)
+			}
+		})
 	}
 }
 
@@ -198,14 +228,31 @@ func TestEditEntryValidation(t *testing.T) {
 		t.Fatalf("Add(seed) error = %v", err)
 	}
 
-	if _, err := EditEntry(dbDir, host, 0, Entry{Action: "bad", Epoch: 1}); err == nil {
-		t.Fatal("EditEntry() accepted unsupported action")
+	tests := []struct {
+		name        string
+		replacement Entry
+	}{
+		{
+			name:        "unsupported action",
+			replacement: Entry{Action: "bad", Epoch: 1},
+		},
+		{
+			name:        "non-positive epoch",
+			replacement: Entry{Action: "add", Epoch: 0},
+		},
+		{
+			name:        "mismatched source",
+			replacement: Entry{Action: "add", Epoch: 1, Source: "other-host"},
+		},
 	}
-	if _, err := EditEntry(dbDir, host, 0, Entry{Action: "add", Epoch: 0}); err == nil {
-		t.Fatal("EditEntry() accepted non-positive epoch")
-	}
-	if _, err := EditEntry(dbDir, host, 0, Entry{Action: "add", Epoch: 1, Source: "other-host"}); err == nil {
-		t.Fatal("EditEntry() accepted mismatched source")
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := EditEntry(dbDir, host, 0, test.replacement); err == nil {
+				t.Fatalf("EditEntry() accepted invalid replacement: %s", test.name)
+			}
+		})
 	}
 }
 

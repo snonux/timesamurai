@@ -90,19 +90,32 @@ func TestBuildReportTracksBufferTotals(t *testing.T) {
 func TestBuildReportRejectsInvalidLoginSequences(t *testing.T) {
 	cfg := config.Default()
 
-	_, err := BuildReport([]Entry{
-		{Action: "logout", What: "work", Epoch: localEpoch(2026, 1, 5, 10, 0, 0)},
-	}, cfg)
-	if err == nil {
-		t.Fatal("BuildReport() accepted logout without login")
+	tests := []struct {
+		name    string
+		entries []Entry
+	}{
+		{
+			name: "logout without login",
+			entries: []Entry{
+				{Action: "logout", What: "work", Epoch: localEpoch(2026, 1, 5, 10, 0, 0)},
+			},
+		},
+		{
+			name: "double login",
+			entries: []Entry{
+				{Action: "login", What: "work", Epoch: localEpoch(2026, 1, 5, 9, 0, 0)},
+				{Action: "login", What: "work", Epoch: localEpoch(2026, 1, 5, 10, 0, 0)},
+			},
+		},
 	}
 
-	_, err = BuildReport([]Entry{
-		{Action: "login", What: "work", Epoch: localEpoch(2026, 1, 5, 9, 0, 0)},
-		{Action: "login", What: "work", Epoch: localEpoch(2026, 1, 5, 10, 0, 0)},
-	}, cfg)
-	if err == nil {
-		t.Fatal("BuildReport() accepted double login")
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := BuildReport(test.entries, cfg); err == nil {
+				t.Fatalf("BuildReport() accepted invalid sequence %q", test.name)
+			}
+		})
 	}
 }
 
