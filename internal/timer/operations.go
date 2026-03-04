@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,14 +14,22 @@ type Tracker interface {
 	Track(description string, minutes int) error
 }
 
+const trackCommandTimeout = 10 * time.Second
+
 type taskwarriorTracker struct{}
 
 func (taskwarriorTracker) Track(description string, minutes int) error {
 	taskDescription := fmt.Sprintf("%dmin %s", minutes, description)
-	cmd := exec.Command("task", "add", "+track", taskDescription)
+	ctx, cancel := context.WithTimeout(context.Background(), trackCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "task", "add", "+track", taskDescription)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("task command timed out after %s", trackCommandTimeout)
+		}
 		return fmt.Errorf("task command failed: %s\nOutput: %s", err, string(output))
 	}
 
