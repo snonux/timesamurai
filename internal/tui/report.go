@@ -119,7 +119,7 @@ func (m *ReportModel) View(styles Styles) string {
 		return styles.Body.Render("Report\n\nNo report data.")
 	}
 
-	week := m.weeks[m.weekIndex]
+	week := &m.weeks[m.weekIndex]
 	header := fmt.Sprintf(
 		"Report  Week %s  [%d/%d]  verbose:%t",
 		week.WeekLabel,
@@ -153,7 +153,7 @@ func (m *ReportModel) View(styles Styles) string {
 	return styles.Body.Render(body)
 }
 
-func (m *ReportModel) dayRows(week worktime.WeekReport) []string {
+func (m *ReportModel) dayRows(week *worktime.WeekReport) []string {
 	rows := make([]string, 0, len(week.Days))
 	for _, day := range week.Days {
 		row := fmt.Sprintf(
@@ -250,7 +250,7 @@ func (m *ReportModel) rowCount() int {
 	if len(m.weeks) == 0 {
 		return 0
 	}
-	return len(m.dayRows(m.weeks[m.weekIndex]))
+	return len(m.dayRows(&m.weeks[m.weekIndex]))
 }
 
 func toHours(seconds int64) float64 {

@@ -168,8 +168,10 @@ func processEntry(
 func FormatReport(weeks []WeekReport, verbose, color bool) string {
 	var out strings.Builder
 
-	for _, week := range weeks {
-		for _, day := range week.Days {
+	for weekIdx := range weeks {
+		week := &weeks[weekIdx]
+		for dayIdx := range week.Days {
+			day := &week.Days[dayIdx]
 			out.WriteString("   ")
 			out.WriteString(day.Marker)
 			out.WriteString(" ")
