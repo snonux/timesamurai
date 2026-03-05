@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
 )
 
@@ -47,6 +48,21 @@ func TestReportScrollingAndTopBottom(t *testing.T) {
 	model, _ = model.Update(keyRune('g'))
 	if model.cursor != 0 {
 		t.Fatalf("cursor after gg = %d, want 0", model.cursor)
+	}
+}
+
+func TestReportPageScrollingWithPgKeys(t *testing.T) {
+	model := NewReportModel(sampleWeeksWithDayCount(20))
+	model.SetSize(120, 11)
+
+	model, _ = model.Update(keyCode(tea.KeyPgDown))
+	if got, want := model.cursor, model.pageSize(); got != want {
+		t.Fatalf("cursor after pgdown = %d, want %d", got, want)
+	}
+
+	model, _ = model.Update(keyCode(tea.KeyPgUp))
+	if model.cursor != 0 {
+		t.Fatalf("cursor after pgup = %d, want 0", model.cursor)
 	}
 }
 
@@ -118,6 +134,32 @@ func sampleWeeks() []worktime.WeekReport {
 				{DayLabel: "Mon 20260309 11", Marker: " ", Epoch: 4, Values: map[string]int64{"work": 9 * 3600}},
 				{DayLabel: "Tue 20260310 11", Marker: " ", Epoch: 5, Values: map[string]int64{"work": 9 * 3600}},
 			},
+		},
+	}
+}
+
+func sampleWeeksWithDayCount(count int) []worktime.WeekReport {
+	days := make([]worktime.DayReport, 0, count)
+	for idx := 0; idx < count; idx++ {
+		days = append(days, worktime.DayReport{
+			DayLabel: "Day",
+			Marker:   " ",
+			Epoch:    int64(idx + 1),
+			Values: map[string]int64{
+				"work": 8 * 3600,
+			},
+		})
+	}
+
+	return []worktime.WeekReport{
+		{
+			WeekLabel:                "10",
+			CumulativeBalanceSeconds: 2 * 3600,
+			BufferSeconds:            1 * 3600,
+			Values: map[string]int64{
+				"work": 20 * 3600,
+			},
+			Days: days,
 		},
 	}
 }

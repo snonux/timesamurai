@@ -140,6 +140,18 @@ func TestEntriesNavigationKeys(t *testing.T) {
 	if model.cursor >= before {
 		t.Fatalf("cursor after ctrl+u = %d, want less than %d", model.cursor, before)
 	}
+
+	model.cursor = 0
+	model.offset = 0
+	model, _ = model.Update(keyCode(tea.KeyPgDown))
+	if got, want := model.cursor, model.pageSize(); got != want {
+		t.Fatalf("cursor after pgdown = %d, want %d", got, want)
+	}
+
+	model, _ = model.Update(keyCode(tea.KeyPgUp))
+	if model.cursor != 0 {
+		t.Fatalf("cursor after pgup = %d, want 0", model.cursor)
+	}
 }
 
 func TestEntriesSearchAndFilter(t *testing.T) {

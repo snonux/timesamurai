@@ -358,6 +358,14 @@ func (m *EntriesModel) updateNormalMode(keyMsg tea.KeyPressMsg) {
 		m.moveCursor(-m.halfPage())
 		m.pendingG = false
 		m.pendingD = false
+	case "pgdown":
+		m.moveCursor(m.pageSize())
+		m.pendingG = false
+		m.pendingD = false
+	case "pgup":
+		m.moveCursor(-m.pageSize())
+		m.pendingG = false
+		m.pendingD = false
 	case "ctrl+f":
 		m.moveCursor(m.pageSize())
 		m.pendingG = false
@@ -406,7 +414,7 @@ func (m *EntriesModel) View(styles Styles) string {
 
 	rows := m.renderTimelineTable(styles)
 	body := title + "\n\n" + rows
-	body += "\n\n" + styles.Hint.Render("j/k rows, h/l columns, Enter edit cell, s save, / search, D day-off datepicker, dd delete")
+	body += "\n\n" + styles.Hint.Render("j/k rows, PgUp/PgDn page, h/l columns, Enter edit cell, s save, / search, D day-off datepicker, dd delete")
 	return styles.Body.Render(body + m.renderStatus(styles))
 }
 

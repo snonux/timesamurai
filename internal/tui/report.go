@@ -91,6 +91,12 @@ func (m *ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
 	case "k", "up":
 		m.moveCursor(-1)
 		m.pendingG = false
+	case "pgdown":
+		m.moveCursor(m.pageSize())
+		m.pendingG = false
+	case "pgup":
+		m.moveCursor(-m.pageSize())
+		m.pendingG = false
 	case "G":
 		m.cursor = m.rowCount() - 1
 		m.ensureCursorVisible()
@@ -153,7 +159,7 @@ func (m *ReportModel) View(styles Styles) string {
 		toHours(week.Values["work"]),
 		toHours(week.BufferSeconds),
 	)
-	hint := "j/k scroll, gg/G top/bottom, ]w/[w week nav, v verbose"
+	hint := "j/k scroll, PgUp/PgDn page, gg/G top/bottom, ]w/[w week nav, v verbose"
 
 	body := header + "\n\n" + strings.Join(lines, "\n") + "\n\n" + summary + "\n" + hint
 	if m.warn != "" {
@@ -253,6 +259,14 @@ func (m *ReportModel) listRows() int {
 		return 1
 	}
 	return rows
+}
+
+func (m *ReportModel) pageSize() int {
+	page := m.listRows()
+	if page < 1 {
+		return 1
+	}
+	return page
 }
 
 func (m *ReportModel) rowCount() int {
