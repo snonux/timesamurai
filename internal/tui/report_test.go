@@ -5,21 +5,20 @@ import (
 	"testing"
 
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestReportWeekNavigation(t *testing.T) {
 	model := NewReportModel(sampleWeeks())
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model, _ = model.Update(keyRune(']'))
+	model, _ = model.Update(keyRune('w'))
 	if model.weekIndex != 1 {
 		t.Fatalf("weekIndex after ]w = %d, want 1", model.weekIndex)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model, _ = model.Update(keyRune('['))
+	model, _ = model.Update(keyRune('w'))
 	if model.weekIndex != 0 {
 		t.Fatalf("weekIndex after [w = %d, want 0", model.weekIndex)
 	}
@@ -29,23 +28,23 @@ func TestReportScrollingAndTopBottom(t *testing.T) {
 	model := NewReportModel(sampleWeeks())
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model, _ = model.Update(keyRune('j'))
 	if model.cursor != 1 {
 		t.Fatalf("cursor after j = %d, want 1", model.cursor)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model, _ = model.Update(keyRune('k'))
 	if model.cursor != 0 {
 		t.Fatalf("cursor after k = %d, want 0", model.cursor)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	model, _ = model.Update(keyRune('G'))
 	if model.cursor != model.rowCount()-1 {
 		t.Fatalf("cursor after G = %d, want %d", model.cursor, model.rowCount()-1)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	model, _ = model.Update(keyRune('g'))
+	model, _ = model.Update(keyRune('g'))
 	if model.cursor != 0 {
 		t.Fatalf("cursor after gg = %d, want 0", model.cursor)
 	}
@@ -55,7 +54,7 @@ func TestReportVerboseToggle(t *testing.T) {
 	model := NewReportModel(sampleWeeks())
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	model, _ = model.Update(keyRune('v'))
 	if !model.verbose {
 		t.Fatal("verbose = false, want true after v")
 	}

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	timesamurai "codeberg.org/snonux/timesamurai/internal"
 	"codeberg.org/snonux/timesamurai/internal/config"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type tab int
@@ -135,7 +135,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.timer.SetSize(bodyWidth, bodyHeight)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		key := msg.String()
 		entriesCapturingText := m.activeTab == tabEntries && m.entries.capturesTextInput()
 
@@ -228,7 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	header := m.renderTabs()
 	body := m.renderBody()
 	status := m.renderStatusLine()
@@ -267,9 +267,12 @@ func (m *Model) View() string {
 	rendered := m.styles.App.Render(content)
 
 	if m.width > 0 && m.height > 0 {
-		return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, rendered)
+		rendered = lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, rendered)
 	}
-	return rendered
+
+	view := tea.NewView(rendered)
+	view.AltScreen = true
+	return view
 }
 
 func (m *Model) nextTab() tea.Cmd {
@@ -320,7 +323,7 @@ func (m *Model) renderBody() string {
 		}
 		return m.report.View(m.styles)
 	case tabTimer:
-		return m.timer.View()
+		return m.timer.View().Content
 	default:
 		return ""
 	}

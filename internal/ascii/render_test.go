@@ -3,7 +3,7 @@ package ascii
 import (
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func TestGetFont(t *testing.T) {

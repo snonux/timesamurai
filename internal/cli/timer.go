@@ -12,7 +12,7 @@ import (
 	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
 	tuiapp "codeberg.org/snonux/timesamurai/internal/tui"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 )
 

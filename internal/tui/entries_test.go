@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestEntriesModelSortsChronologically(t *testing.T) {
@@ -44,17 +44,17 @@ func TestEntriesColumnNavigationKeys(t *testing.T) {
 		t.Fatalf("selectedColumn = %d, want %d", model.selectedColumn, entriesColumnDescription)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model, _ = model.Update(keyCode(tea.KeyLeft))
 	if model.selectedColumn != entriesColumnSource {
 		t.Fatalf("selectedColumn after left = %d, want %d", model.selectedColumn, entriesColumnSource)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	model, _ = model.Update(keyRune('h'))
 	if model.selectedColumn != entriesColumnValue {
 		t.Fatalf("selectedColumn after h = %d, want %d", model.selectedColumn, entriesColumnValue)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model, _ = model.Update(keyRune('l'))
 	if model.selectedColumn != entriesColumnSource {
 		t.Fatalf("selectedColumn after l = %d, want %d", model.selectedColumn, entriesColumnSource)
 	}
@@ -65,7 +65,7 @@ func TestEntriesEnterEditsSelectedColumnValue(t *testing.T) {
 	model.SetSize(120, 12)
 	model.selectedColumn = entriesColumnValue
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if !model.editMode {
 		t.Fatal("editMode = false, want true after Enter on value column")
 	}
@@ -81,23 +81,23 @@ func TestEntriesEnterEditsSelectedColumnDateAndTime(t *testing.T) {
 	original := model.visible[0].Epoch
 
 	model.selectedColumn = entriesColumnDate
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if !model.editMode || model.editField != entryEditFieldDate {
 		t.Fatalf("date edit not entered: editMode=%t editField=%d", model.editMode, model.editField)
 	}
 	model.input = "2026-02-02"
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if model.visible[0].Epoch == original {
 		t.Fatal("epoch did not change after date edit")
 	}
 
 	model.selectedColumn = entriesColumnTime
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if !model.editMode || model.editField != entryEditFieldTime {
 		t.Fatalf("time edit not entered: editMode=%t editField=%d", model.editMode, model.editField)
 	}
 	model.input = "13:45"
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 
 	updatedTime := time.Unix(model.visible[0].Epoch, 0)
 	if updatedTime.Hour() != 13 || updatedTime.Minute() != 45 {
@@ -109,34 +109,34 @@ func TestEntriesNavigationKeys(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(20))
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model, _ = model.Update(keyRune('j'))
 	if model.cursor != 1 {
 		t.Fatalf("cursor after j = %d, want 1", model.cursor)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model, _ = model.Update(keyRune('k'))
 	if model.cursor != 0 {
 		t.Fatalf("cursor after k = %d, want 0", model.cursor)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	model, _ = model.Update(keyRune('G'))
 	if model.cursor != len(model.visible)-1 {
 		t.Fatalf("cursor after G = %d, want %d", model.cursor, len(model.visible)-1)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	model, _ = model.Update(keyRune('g'))
+	model, _ = model.Update(keyRune('g'))
 	if model.cursor != 0 {
 		t.Fatalf("cursor after gg = %d, want 0", model.cursor)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	model, _ = model.Update(keyCtrl('d'))
 	if model.cursor == 0 {
 		t.Fatal("cursor did not move after ctrl+d")
 	}
 
 	before := model.cursor
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model, _ = model.Update(keyCtrl('u'))
 	if model.cursor >= before {
 		t.Fatalf("cursor after ctrl+u = %d, want less than %d", model.cursor, before)
 	}
@@ -153,27 +153,27 @@ func TestEntriesSearchAndFilter(t *testing.T) {
 	model.SetSize(120, 12)
 
 	// Search for "meeting".
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyRune('/'))
+	model, _ = model.Update(keyRune('m'))
+	model, _ = model.Update(keyRune('e'))
+	model, _ = model.Update(keyRune('e'))
+	model, _ = model.Update(keyRune('t'))
+	model, _ = model.Update(keyRune('i'))
+	model, _ = model.Update(keyRune('n'))
+	model, _ = model.Update(keyRune('g'))
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 
 	if len(model.visible) != 1 || model.visible[0].Descr != "meeting" {
 		t.Fatalf("search results mismatch: %+v", model.visible)
 	}
 
 	// Apply filter by category "work" on top of search.
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyRune('f'))
+	model, _ = model.Update(keyRune('w'))
+	model, _ = model.Update(keyRune('o'))
+	model, _ = model.Update(keyRune('r'))
+	model, _ = model.Update(keyRune('k'))
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 
 	if len(model.visible) != 1 || model.visible[0].What != "work" {
 		t.Fatalf("filter results mismatch: %+v", model.visible)
@@ -186,13 +186,13 @@ func TestEntriesEditFlow(t *testing.T) {
 
 	original := model.visible[0].Descr
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	model, _ = model.Update(keyRune('e'))
 	if !model.editMode {
 		t.Fatal("editMode = false, want true after e")
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyRune('!'))
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 
 	if model.editMode {
 		t.Fatal("editMode = true, want false after Enter")
@@ -207,7 +207,7 @@ func TestEntriesEditModeAcceptsSpaceKey(t *testing.T) {
 	model.editMode = true
 	model.input = "hello"
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	model, _ = model.Update(keyRune(' '))
 	if model.input != "hello " {
 		t.Fatalf("input after space = %q, want %q", model.input, "hello ")
 	}
@@ -244,13 +244,13 @@ func TestEntriesValueEditFlow(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(3))
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	model, _ = model.Update(keyRune('v'))
 	if !model.editMode {
 		t.Fatal("editMode = false, want true after v")
 	}
 
 	model.input = "120"
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if model.editMode {
 		t.Fatal("editMode = true, want false after Enter")
 	}
@@ -264,7 +264,7 @@ func TestEntriesBackspaceIsRuneSafeInEditMode(t *testing.T) {
 	model.editMode = true
 	model.input = "aй"
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model, _ = model.Update(keyCode(tea.KeyBackspace))
 	if model.input != "a" {
 		t.Fatalf("input after backspace = %q, want %q", model.input, "a")
 	}
@@ -275,7 +275,7 @@ func TestEntriesBackspaceIsRuneSafeInSearchMode(t *testing.T) {
 	model.searchMode = true
 	model.input = "тест"
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model, _ = model.Update(keyCode(tea.KeyBackspace))
 	if model.input != "тес" {
 		t.Fatalf("input after backspace = %q, want %q", model.input, "тес")
 	}
@@ -285,13 +285,13 @@ func TestEntriesDeleteWithConfirmation(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(3))
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model, _ = model.Update(keyRune('d'))
+	model, _ = model.Update(keyRune('d'))
 	if !model.confirmDelete {
 		t.Fatal("confirmDelete = false, want true after dd")
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model, _ = model.Update(keyRune('n'))
 	if model.confirmDelete {
 		t.Fatal("confirmDelete = true after cancel")
 	}
@@ -299,9 +299,9 @@ func TestEntriesDeleteWithConfirmation(t *testing.T) {
 		t.Fatalf("entries len = %d, want 3 after cancel", len(model.visible))
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model, _ = model.Update(keyRune('d'))
+	model, _ = model.Update(keyRune('d'))
+	model, _ = model.Update(keyRune('y'))
 
 	if len(model.visible) != 2 {
 		t.Fatalf("entries len = %d, want 2 after delete confirmation", len(model.visible))
@@ -312,16 +312,16 @@ func TestEntriesInsertWithOAndShiftO(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(2))
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	model, _ = model.Update(keyRune('o'))
 	if len(model.visible) != 3 {
 		t.Fatalf("entries len = %d, want 3 after o", len(model.visible))
 	}
 	if !model.editMode {
 		t.Fatal("editMode = false after o insertion")
 	}
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model, _ = model.Update(keyCode(tea.KeyEscape))
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'O'}})
+	model, _ = model.Update(keyRune('O'))
 	if len(model.visible) != 4 {
 		t.Fatalf("entries len = %d, want 4 after O", len(model.visible))
 	}
@@ -349,9 +349,9 @@ func TestEntriesDeletePersistsToDB(t *testing.T) {
 	model.SetPersistence(dbDir, host)
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model, _ = model.Update(keyRune('d'))
+	model, _ = model.Update(keyRune('d'))
+	model, _ = model.Update(keyRune('y'))
 
 	if len(model.visible) != 2 {
 		t.Fatalf("entries len = %d, want 2 after persisted delete", len(model.visible))
@@ -368,7 +368,7 @@ func TestEntriesDeletePersistsToDB(t *testing.T) {
 		t.Fatalf("host entries len before save = %d, want 3", len(reloaded.Entries[host]))
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model, _ = model.Update(keyRune('s'))
 	if model.hasUnsavedChanges() {
 		t.Fatal("hasUnsavedChanges = true, want false after save")
 	}
@@ -399,13 +399,13 @@ func TestEntriesDayOffPromptPersistsToDB(t *testing.T) {
 	model.SetPersistence(dbDir, host)
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model, _ = model.Update(keyRune('D'))
 	if !model.dayOffMode {
 		t.Fatal("dayOffMode = false, want true after D")
 	}
 
 	model.dayOffDate = time.Date(2026, 1, 22, 12, 34, 0, 0, time.Local)
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ = model.Update(keyCode(tea.KeyEnter))
 	if model.dayOffMode {
 		t.Fatal("dayOffMode = true, want false after Enter")
 	}
@@ -423,7 +423,7 @@ func TestEntriesDayOffPromptPersistsToDB(t *testing.T) {
 		t.Fatalf("entries len before save = %d, want 0", len(entries))
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model, _ = model.Update(keyRune('s'))
 	if model.hasUnsavedChanges() {
 		t.Fatal("hasUnsavedChanges = true, want false after save")
 	}
@@ -455,23 +455,23 @@ func TestEntriesDayOffDatepickerNavigation(t *testing.T) {
 	model := NewEntriesModel(sampleEntries(1))
 	model.SetSize(120, 12)
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model, _ = model.Update(keyRune('D'))
 	if !model.dayOffMode {
 		t.Fatal("dayOffMode = false, want true after D")
 	}
 
 	model.dayOffDate = time.Date(2026, 2, 12, 0, 0, 0, 0, time.Local)
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model, _ = model.Update(keyCode(tea.KeyRight))
 	if !sameDay(model.dayOffDate, time.Date(2026, 2, 13, 0, 0, 0, 0, time.Local)) {
 		t.Fatalf("dayOffDate after right = %v, want 2026-02-13", model.dayOffDate)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model, _ = model.Update(keyCode(tea.KeyDown))
 	if !sameDay(model.dayOffDate, time.Date(2026, 2, 20, 0, 0, 0, 0, time.Local)) {
 		t.Fatalf("dayOffDate after down = %v, want 2026-02-20", model.dayOffDate)
 	}
 
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model, _ = model.Update(keyCode(tea.KeyPgUp))
 	if !sameDay(model.dayOffDate, time.Date(2026, 1, 20, 0, 0, 0, 0, time.Local)) {
 		t.Fatalf("dayOffDate after pgup = %v, want 2026-01-20", model.dayOffDate)
 	}

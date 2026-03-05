@@ -2,7 +2,7 @@ package cli
 
 import (
 	tuiapp "codeberg.org/snonux/timesamurai/internal/tui"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 )
 

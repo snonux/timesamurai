@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"codeberg.org/snonux/timesamurai/internal/ascii"
 	"codeberg.org/snonux/timesamurai/internal/config"
 	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
 )
 
@@ -121,14 +121,14 @@ func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, timerTick()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
 			_ = m.state.Save()
 			return m, tea.Quit
 
-		case "s", " ":
+		case "s", "space":
 			if m.state.Running {
 				m.state.ElapsedTime += time.Since(m.state.StartTime)
 				m.state.Running = false
@@ -167,9 +167,9 @@ func (m TimerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the timer screen.
-func (m TimerModel) View() string {
+func (m TimerModel) View() tea.View {
 	if m.quitting {
-		return ""
+		return tea.NewView("")
 	}
 
 	elapsed := m.state.ElapsedTime
@@ -194,13 +194,15 @@ func (m TimerModel) View() string {
 		m.helpStyle.Render("s/Space: start-stop, r: reset, f: change font, l: work login/logout, q: quit"),
 	}
 
-	return lipgloss.Place(
+	view := tea.NewView(lipgloss.Place(
 		m.width,
 		m.height,
 		lipgloss.Center,
 		lipgloss.Center,
 		lipgloss.JoinVertical(lipgloss.Center, lines...),
-	)
+	))
+	view.AltScreen = true
+	return view
 }
 
 func (m TimerModel) renderTimer(elapsed time.Duration) string {

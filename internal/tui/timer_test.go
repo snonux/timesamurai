@@ -5,7 +5,6 @@ import (
 
 	"codeberg.org/snonux/timesamurai/internal/config"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestTimerModelToggleWorkLogin(t *testing.T) {
@@ -25,13 +24,13 @@ func TestTimerModelToggleWorkLogin(t *testing.T) {
 		t.Fatal("work integration should be enabled")
 	}
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ := model.Update(keyRune('l'))
 	model = modelAny.(TimerModel)
 	if !model.work.loggedIn {
 		t.Fatal("work should be logged in after first l")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ = model.Update(keyRune('l'))
 	model = modelAny.(TimerModel)
 	if model.work.loggedIn {
 		t.Fatal("work should be logged out after second l")
@@ -55,7 +54,7 @@ func TestTimerModelFontCycling(t *testing.T) {
 	}
 
 	originalFont := model.font
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	modelAny, _ := model.Update(keyRune('f'))
 	model = modelAny.(TimerModel)
 	if model.font == originalFont {
 		t.Fatalf("font did not change after f: %q", model.font)
@@ -73,7 +72,7 @@ func TestTimerModelWorkToggleWhenDisabled(t *testing.T) {
 		t.Fatalf("NewTimerModel() error = %v", err)
 	}
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	modelAny, _ := model.Update(keyRune('l'))
 	model = modelAny.(TimerModel)
 	if model.work.status != "work integration disabled" {
 		t.Fatalf("workStatus = %q, want work integration disabled", model.work.status)

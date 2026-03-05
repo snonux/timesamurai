@@ -10,11 +10,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"codeberg.org/snonux/timesamurai/internal/duration"
 	"codeberg.org/snonux/timesamurai/internal/timefmt"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type entryEditField int
@@ -125,7 +125,7 @@ func (m *EntriesModel) SetEntries(entries []worktime.Entry) {
 
 // Update handles keyboard navigation and search/filter/edit interaction.
 func (m *EntriesModel) Update(msg tea.Msg) (EntriesModel, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return *m, nil
 	}
@@ -174,7 +174,7 @@ func (m *EntriesModel) updateConfirmDelete(key string) bool {
 	return true
 }
 
-func (m *EntriesModel) updateEditMode(keyMsg tea.KeyMsg) bool {
+func (m *EntriesModel) updateEditMode(keyMsg tea.KeyPressMsg) bool {
 	if !m.editMode {
 		return false
 	}
@@ -200,7 +200,7 @@ func (m *EntriesModel) updateEditMode(keyMsg tea.KeyMsg) bool {
 	return true
 }
 
-func (m *EntriesModel) updateDayOffMode(keyMsg tea.KeyMsg) bool {
+func (m *EntriesModel) updateDayOffMode(keyMsg tea.KeyPressMsg) bool {
 	if !m.dayOffMode {
 		return false
 	}
@@ -239,7 +239,7 @@ func (m *EntriesModel) updateDayOffMode(keyMsg tea.KeyMsg) bool {
 	return true
 }
 
-func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyMsg) bool {
+func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyPressMsg) bool {
 	if !m.searchMode && !m.filterMode {
 		return false
 	}
@@ -268,7 +268,7 @@ func (m *EntriesModel) updateSearchFilterMode(keyMsg tea.KeyMsg) bool {
 	return true
 }
 
-func (m *EntriesModel) updateNormalMode(keyMsg tea.KeyMsg) {
+func (m *EntriesModel) updateNormalMode(keyMsg tea.KeyPressMsg) {
 	switch keyMsg.String() {
 	case "/":
 		m.searchMode = true
@@ -1084,15 +1084,16 @@ func trimLastRune(value string) string {
 	return value[:len(value)-size]
 }
 
-func appendInputKey(input string, keyMsg tea.KeyMsg) string {
-	switch keyMsg.Type {
-	case tea.KeyRunes:
-		return input + string(keyMsg.Runes)
-	case tea.KeySpace:
+func appendInputKey(input string, keyMsg tea.KeyPressMsg) string {
+	if keyMsg.String() == "space" {
 		return input + " "
-	default:
-		return input
 	}
+
+	if keyMsg.Text != "" {
+		return input + keyMsg.Text
+	}
+
+	return input
 }
 
 func entryMatchesSearch(entry worktime.Entry, search string) bool {

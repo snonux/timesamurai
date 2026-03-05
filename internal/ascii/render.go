@@ -5,7 +5,7 @@
 package ascii
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // RenderNumber renders a string of digits as ASCII art using the specified font.

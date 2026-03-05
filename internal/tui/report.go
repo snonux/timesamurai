@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ReportModel is a weekly report browser screen.
@@ -66,7 +66,7 @@ func (m *ReportModel) SetWarning(warning string) {
 
 // Update handles keyboard interaction.
 func (m *ReportModel) Update(msg tea.Msg) (ReportModel, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return *m, nil
 	}

@@ -5,29 +5,29 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"codeberg.org/snonux/timesamurai/internal/config"
 	"codeberg.org/snonux/timesamurai/internal/worktime"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestTabNavigation(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	modelAny, _ := model.Update(keyCode(tea.KeyTab))
 	model = modelAny.(*Model)
 	if model.activeTab != tabReport {
 		t.Fatalf("active tab after Tab = %v, want %v", model.activeTab, tabReport)
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	modelAny, _ = model.Update(keyRune('g'))
 	model = modelAny.(*Model)
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}})
+	modelAny, _ = model.Update(keyRune('T'))
 	model = modelAny.(*Model)
 	if model.activeTab != tabEntries {
 		t.Fatalf("active tab after gT = %v, want %v", model.activeTab, tabEntries)
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	modelAny, _ = model.Update(keyRune('3'))
 	model = modelAny.(*Model)
 	if model.activeTab != tabTimer {
 		t.Fatalf("active tab after key 3 = %v, want %v", model.activeTab, tabTimer)
@@ -37,15 +37,15 @@ func TestTabNavigation(t *testing.T) {
 func TestEntriesTextEditingIgnoresRootGlobalShortcuts(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	modelAny, _ := model.Update(keyRune('o'))
 	model = modelAny.(*Model)
 	if !model.entries.editMode {
 		t.Fatal("entries.editMode = false, want true after o")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	modelAny, _ = model.Update(keyRune('g'))
 	model = modelAny.(*Model)
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	modelAny, _ = model.Update(keyRune(' '))
 	model = modelAny.(*Model)
 
 	if model.entries.input != "g " {
@@ -59,25 +59,25 @@ func TestEntriesTextEditingIgnoresRootGlobalShortcuts(t *testing.T) {
 func TestHelpToggle(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	modelAny, _ := model.Update(keyRune('?'))
 	model = modelAny.(*Model)
 	if !model.showHelp {
 		t.Fatal("showHelp = false, want true after ?")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	modelAny, _ = model.Update(keyRune('?'))
 	model = modelAny.(*Model)
 	if model.showHelp {
 		t.Fatal("showHelp = true, want false after second ?")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}})
+	modelAny, _ = model.Update(keyRune('H'))
 	model = modelAny.(*Model)
 	if !model.showHelp {
 		t.Fatal("showHelp = false, want true after H")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	modelAny, _ = model.Update(keyCode(tea.KeyEscape))
 	model = modelAny.(*Model)
 	if model.showHelp {
 		t.Fatal("showHelp = true, want false after Esc")
@@ -87,7 +87,7 @@ func TestHelpToggle(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	modelAny, cmd := model.Update(keyRune('q'))
 	model = modelAny.(*Model)
 	if cmd == nil {
 		t.Fatal("quit cmd is nil for q")
@@ -96,9 +96,9 @@ func TestQuitKeys(t *testing.T) {
 		t.Fatal("q key did not return tea.Quit command")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Z'}})
+	modelAny, _ = model.Update(keyRune('Z'))
 	model = modelAny.(*Model)
-	_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	_, cmd = model.Update(keyRune('Q'))
 	if cmd == nil {
 		t.Fatal("quit cmd is nil for ZQ")
 	}
@@ -110,13 +110,13 @@ func TestQuitKeys(t *testing.T) {
 func TestQuitWithUnsavedChangesPromptsConfirmation(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	modelAny, _ := model.Update(keyRune('o'))
 	model = modelAny.(*Model)
 	if !model.entries.hasUnsavedChanges() {
 		t.Fatal("entries.hasUnsavedChanges() = false, want true after insertion")
 	}
 
-	modelAny, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	modelAny, cmd := model.Update(keyRune('q'))
 	model = modelAny.(*Model)
 	if cmd != nil {
 		t.Fatal("quit command should be deferred until quit confirmation")
@@ -125,7 +125,7 @@ func TestQuitWithUnsavedChangesPromptsConfirmation(t *testing.T) {
 		t.Fatal("confirmQuit = false, want true after q with unsaved changes")
 	}
 
-	modelAny, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	modelAny, cmd = model.Update(keyCode(tea.KeyEscape))
 	model = modelAny.(*Model)
 	if cmd != nil {
 		t.Fatal("Esc in quit confirmation should not quit")
@@ -138,19 +138,19 @@ func TestQuitWithUnsavedChangesPromptsConfirmation(t *testing.T) {
 func TestQuitConfirmationSaveAndQuitPersistsEntries(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	modelAny, _ := model.Update(keyRune('o'))
 	model = modelAny.(*Model)
 	if !model.entries.hasUnsavedChanges() {
 		t.Fatal("entries.hasUnsavedChanges() = false, want true after insertion")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	modelAny, _ = model.Update(keyRune('q'))
 	model = modelAny.(*Model)
 	if !model.confirmQuit {
 		t.Fatal("confirmQuit = false, want true after q with unsaved changes")
 	}
 
-	modelAny, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	modelAny, cmd := model.Update(keyRune('s'))
 	model = modelAny.(*Model)
 	if cmd == nil {
 		t.Fatal("quit cmd is nil for save-and-quit")
@@ -174,7 +174,7 @@ func TestQuitConfirmationSaveAndQuitPersistsEntries(t *testing.T) {
 func TestViewContainsTabLabels(t *testing.T) {
 	model := newRootModelForTest(t)
 	view := model.View()
-	if view == "" {
+	if view.Content == "" {
 		t.Fatal("View() returned empty output")
 	}
 }
@@ -190,13 +190,13 @@ func TestEntriesTabUsesEntriesModelView(t *testing.T) {
 func TestDiscoToggleAndThemeResetKeys(t *testing.T) {
 	model := newRootModelForTest(t)
 
-	modelAny, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	modelAny, _ := model.Update(keyRune('x'))
 	model = modelAny.(*Model)
 	if !model.disco {
 		t.Fatal("disco = false, want true after x")
 	}
 
-	modelAny, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	modelAny, _ = model.Update(keyRune('C'))
 	model = modelAny.(*Model)
 	if model.theme != DefaultTheme() {
 		t.Fatalf("theme after C = %+v, want default theme", model.theme)
