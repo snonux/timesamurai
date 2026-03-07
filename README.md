@@ -1,3 +1,5 @@
+> **🚧 PRE-ALPHA SOFTWARE:** This project is in a pre-alpha state and is intended for my own personal use only. Use at your own risk.
+
 # timesamurai
 
 `timesamurai` is a terminal time-tracking tool that combines:
