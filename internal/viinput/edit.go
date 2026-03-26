@@ -40,20 +40,65 @@ func (m *Model) insertText(text string) {
 }
 
 func (m *Model) deleteBeforeCursor() {
-	if m.cursor <= 0 || len(m.runes) == 0 {
-		return
-	}
-
-	m.snapshot()
-	m.runes = append(append([]rune(nil), m.runes[:m.cursor-1]...), m.runes[m.cursor:]...)
-	m.cursor--
+	m.deleteRange(m.cursor-1, m.cursor)
 }
 
 func (m *Model) deleteAtCursor() {
-	if len(m.runes) == 0 || m.cursor >= len(m.runes) {
+	m.deleteRange(m.cursor, m.cursor+1)
+}
+
+func (m *Model) deleteLine() {
+	m.deleteRange(0, len(m.runes))
+}
+
+func (m *Model) deleteToLineEnd() {
+	m.deleteRange(m.cursor, len(m.runes))
+}
+
+func (m *Model) deleteFromLineStart() {
+	m.deleteRange(0, m.cursor)
+}
+
+func (m *Model) deleteWordForward() {
+	m.deleteRange(m.cursor, wordForward(m.runes, m.cursor))
+}
+
+func (m *Model) deleteWordEnd() {
+	end := wordEnd(m.runes, m.cursor)
+	if end < len(m.runes) {
+		end++
+	}
+	m.deleteRange(m.cursor, end)
+}
+
+func (m *Model) deleteWordBackward() {
+	m.deleteRange(wordBackward(m.runes, m.cursor), m.cursor)
+}
+
+func (m *Model) changeToLineEnd() {
+	m.deleteToLineEnd()
+	m.mode = ModeInsert
+	m.pending = 0
+}
+
+func (m *Model) deleteRange(start, end int) {
+	if len(m.runes) == 0 {
+		return
+	}
+
+	start = clampInt(start, 0, len(m.runes))
+	end = clampInt(end, 0, len(m.runes))
+	if start > end {
+		start, end = end, start
+	}
+	if start == end {
 		return
 	}
 
 	m.snapshot()
-	m.runes = append(append([]rune(nil), m.runes[:m.cursor]...), m.runes[m.cursor+1:]...)
+	next := make([]rune, 0, len(m.runes)-(end-start))
+	next = append(next, m.runes[:start]...)
+	next = append(next, m.runes[end:]...)
+	m.runes = next
+	m.cursor = start
 }

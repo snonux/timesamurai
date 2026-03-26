@@ -124,6 +124,170 @@ func TestModelInsertModeEditing(t *testing.T) {
 	}
 }
 
+func TestModelNormalModeDeletes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		value      string
+		cursor     int
+		steps      []string
+		wantValue  string
+		wantCursor int
+		wantMode   Mode
+	}{
+		{
+			name:       "x deletes character at cursor",
+			value:      "alpha beta",
+			cursor:     0,
+			steps:      []string{"x"},
+			wantValue:  "lpha beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "X deletes character before cursor",
+			value:      "alpha beta",
+			cursor:     1,
+			steps:      []string{"X"},
+			wantValue:  "lpha beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "D deletes to line end",
+			value:      "alpha beta",
+			cursor:     6,
+			steps:      []string{"D"},
+			wantValue:  "alpha ",
+			wantCursor: 6,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "dd clears line",
+			value:      "alpha beta",
+			cursor:     4,
+			steps:      []string{"d", "d"},
+			wantValue:  "",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "dw deletes forward by word",
+			value:      "alpha beta",
+			cursor:     0,
+			steps:      []string{"d", "w"},
+			wantValue:  "beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "de deletes to word end",
+			value:      "alpha beta",
+			cursor:     0,
+			steps:      []string{"d", "e"},
+			wantValue:  " beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "db deletes backward by word",
+			value:      "alpha beta",
+			cursor:     6,
+			steps:      []string{"d", "b"},
+			wantValue:  "beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "d0 deletes from line start",
+			value:      "alpha beta",
+			cursor:     6,
+			steps:      []string{"d", "0"},
+			wantValue:  "beta",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "d$ deletes from cursor to line end",
+			value:      "alpha beta",
+			cursor:     0,
+			steps:      []string{"d", "$"},
+			wantValue:  "",
+			wantCursor: 0,
+			wantMode:   ModeNormal,
+		},
+		{
+			name:       "C deletes to line end and enters insert mode",
+			value:      "alpha beta",
+			cursor:     6,
+			steps:      []string{"C"},
+			wantValue:  "alpha ",
+			wantCursor: 6,
+			wantMode:   ModeInsert,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			model := New()
+			model.Focus()
+			model.SetValue(tt.value)
+			model.mode = ModeNormal
+			model.cursor = tt.cursor
+
+			for _, step := range tt.steps {
+				model, _ = model.Update(key(step))
+			}
+
+			if got := model.Value(); got != tt.wantValue {
+				t.Fatalf("value = %q, want %q", got, tt.wantValue)
+			}
+			if got := model.cursor; got != tt.wantCursor {
+				t.Fatalf("cursor = %d, want %d", got, tt.wantCursor)
+			}
+			if got := model.Mode(); got != tt.wantMode {
+				t.Fatalf("mode = %v, want %v", got, tt.wantMode)
+			}
+		})
+	}
+}
+
+func TestModelUndoRestoresPriorState(t *testing.T) {
+	t.Parallel()
+
+	model := New()
+	model.Focus()
+	model.SetValue("alpha beta")
+	model.mode = ModeNormal
+	model.cursor = 0
+
+	model, _ = model.Update(key("x"))
+	model, _ = model.Update(key("u"))
+	if got := model.Value(); got != "alpha beta" {
+		t.Fatalf("undo after x value = %q, want %q", got, "alpha beta")
+	}
+	if got := model.cursor; got != 0 {
+		t.Fatalf("undo after x cursor = %d, want 0", got)
+	}
+
+	model, _ = model.Update(key("d"))
+	model, _ = model.Update(key("w"))
+	if got := model.Value(); got != "beta" {
+		t.Fatalf("dw value = %q, want %q", got, "beta")
+	}
+
+	model, _ = model.Update(key("u"))
+	if got := model.Value(); got != "alpha beta" {
+		t.Fatalf("undo after dw value = %q, want %q", got, "alpha beta")
+	}
+	if got := model.cursor; got != 0 {
+		t.Fatalf("undo after dw cursor = %d, want 0", got)
+	}
+}
+
 func key(value string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 0, Text: value}
 }

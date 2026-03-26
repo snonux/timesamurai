@@ -80,19 +80,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	if m.mode == ModeNormal && m.pending != 0 {
-		if m.pending == 'g' {
-			switch keyMsg.String() {
-			case "g", "h":
-				m.cursor = 0
-				m.pending = 0
-				return m, nil
-			case "l":
-				m.cursor = len(m.runes)
-				m.pending = 0
-				return m, nil
-			}
-		}
+		m.handlePendingNormal(keyMsg)
 		m.pending = 0
+		return m, nil
 	}
 
 	switch m.mode {
@@ -169,6 +159,8 @@ func (m Model) updateNormalMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.cursor = len(m.runes)
 	case "g":
 		m.pending = 'g'
+	case "d":
+		m.pending = 'd'
 	case "i":
 		m.mode = ModeInsert
 	case "a":
@@ -180,11 +172,48 @@ func (m Model) updateNormalMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "A":
 		m.cursor = len(m.runes)
 		m.mode = ModeInsert
+	case "x":
+		m.deleteAtCursor()
+	case "X":
+		m.deleteBeforeCursor()
+	case "D":
+		m.deleteToLineEnd()
+	case "C":
+		m.changeToLineEnd()
+	case "u":
+		m.undo()
 	default:
 		m.pending = 0
 	}
 
 	return m, nil
+}
+
+func (m *Model) handlePendingNormal(keyMsg tea.KeyPressMsg) {
+	switch m.pending {
+	case 'g':
+		switch keyMsg.String() {
+		case "g", "h":
+			m.cursor = 0
+		case "l":
+			m.cursor = len(m.runes)
+		}
+	case 'd':
+		switch keyMsg.String() {
+		case "d":
+			m.deleteLine()
+		case "w":
+			m.deleteWordForward()
+		case "e":
+			m.deleteWordEnd()
+		case "b":
+			m.deleteWordBackward()
+		case "0":
+			m.deleteFromLineStart()
+		case "$":
+			m.deleteToLineEnd()
+		}
+	}
 }
 
 func insertedText(keyMsg tea.KeyPressMsg) (string, bool) {
