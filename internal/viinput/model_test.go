@@ -1,6 +1,7 @@
 package viinput
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -285,6 +286,37 @@ func TestModelUndoRestoresPriorState(t *testing.T) {
 	}
 	if got := model.cursor; got != 0 {
 		t.Fatalf("undo after dw cursor = %d, want 0", got)
+	}
+}
+
+func TestModelViewUsesModeSpecificCursorStyles(t *testing.T) {
+	t.Parallel()
+
+	model := New()
+	model.Focus()
+	model.Prompt = "edit> "
+	model.SetValue("abc")
+	model.cursor = 1
+	model.mode = ModeNormal
+
+	got := model.View()
+	if !strings.HasPrefix(got, model.Prompt) {
+		t.Fatalf("view = %q, want prefix %q", got, model.Prompt)
+	}
+	if !strings.Contains(got, "a") || !strings.Contains(got, "bc") {
+		t.Fatalf("view = %q, want rendered contents", got)
+	}
+	if !strings.Contains(got, cursorGlyph(ModeNormal)) {
+		t.Fatalf("normal view = %q, want block cursor", got)
+	}
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("normal view = %q, want lipgloss styling", got)
+	}
+
+	model.mode = ModeInsert
+	got = model.View()
+	if !strings.Contains(got, cursorGlyph(ModeInsert)) {
+		t.Fatalf("insert view = %q, want bar cursor", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Mode represents the current vi-style input state.
@@ -38,6 +39,7 @@ func (m *Model) Focus() tea.Cmd {
 	m.focused = true
 	m.mode = ModeInsert
 	m.pending = 0
+	m.history = nil
 	m.wantsExit = false
 	return nil
 }
@@ -46,6 +48,7 @@ func (m *Model) Focus() tea.Cmd {
 func (m *Model) Blur() {
 	m.focused = false
 	m.pending = 0
+	m.history = nil
 	m.wantsExit = false
 }
 
@@ -54,35 +57,52 @@ func (m *Model) SetValue(value string) {
 	m.runes = []rune(value)
 	m.cursor = len(m.runes)
 	m.pending = 0
+	m.history = nil
 	m.wantsExit = false
 }
 
 // Value returns the current buffer contents.
-func (m Model) Value() string {
+func (m *Model) Value() string {
+	if m == nil {
+		return ""
+	}
+
 	return string(m.runes)
 }
 
 // Mode returns the current editing mode.
-func (m Model) Mode() Mode {
+func (m *Model) Mode() Mode {
+	if m == nil {
+		return ModeInsert
+	}
+
 	return m.mode
 }
 
 // WantsExit reports whether normal mode requested that editing end.
-func (m Model) WantsExit() bool {
+func (m *Model) WantsExit() bool {
+	if m == nil {
+		return false
+	}
+
 	return m.wantsExit
 }
 
 // Update applies a key event to the model.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if m == nil {
+		return Model{}, nil
+	}
+
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok || !m.focused {
-		return m, nil
+		return *m, nil
 	}
 
 	if m.mode == ModeNormal && m.pending != 0 {
 		m.handlePendingNormal(keyMsg)
 		m.pending = 0
-		return m, nil
+		return *m, nil
 	}
 
 	switch m.mode {
@@ -91,28 +111,30 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ModeNormal:
 		return m.updateNormalMode(keyMsg)
 	default:
-		return m, nil
+		return *m, nil
 	}
 }
 
 // View renders the prompt, value and cursor.
-func (m Model) View() string {
+func (m *Model) View() string {
+	if m == nil {
+		return ""
+	}
+
 	var builder strings.Builder
 	builder.WriteString(m.Prompt)
 
-	cursorRune := "█"
-	if m.mode == ModeInsert {
-		cursorRune = "▏"
-	}
+	cursorRune := cursorGlyph(m.mode)
+	cursorStyle := cursorRenderStyle(m.mode)
 
 	cursor := clampInt(m.cursor, 0, len(m.runes))
 	builder.WriteString(string(m.runes[:cursor]))
-	builder.WriteString(cursorRune)
+	builder.WriteString(cursorStyle.Render(cursorRune))
 	builder.WriteString(string(m.runes[cursor:]))
 	return builder.String()
 }
 
-func (m Model) updateInsertMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
+func (m *Model) updateInsertMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch keyMsg.String() {
 	case "esc":
 		m.mode = ModeNormal
@@ -135,14 +157,14 @@ func (m Model) updateInsertMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	return m, nil
+	return *m, nil
 }
 
-func (m Model) updateNormalMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
+func (m *Model) updateNormalMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch keyMsg.String() {
 	case "esc":
 		m.wantsExit = true
-		return m, nil
+		return *m, nil
 	case "h", "left":
 		m.cursor = clampInt(m.cursor-1, 0, len(m.runes))
 	case "l", "right":
@@ -186,7 +208,7 @@ func (m Model) updateNormalMode(keyMsg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.pending = 0
 	}
 
-	return m, nil
+	return *m, nil
 }
 
 func (m *Model) handlePendingNormal(keyMsg tea.KeyPressMsg) {
@@ -214,6 +236,23 @@ func (m *Model) handlePendingNormal(keyMsg tea.KeyPressMsg) {
 			m.deleteToLineEnd()
 		}
 	}
+}
+
+func cursorGlyph(mode Mode) string {
+	if mode == ModeInsert {
+		return "▏"
+	}
+
+	return "█"
+}
+
+func cursorRenderStyle(mode Mode) lipgloss.Style {
+	style := lipgloss.NewStyle()
+	if mode == ModeInsert {
+		return style.Underline(true)
+	}
+
+	return style.Reverse(true)
 }
 
 func insertedText(keyMsg tea.KeyPressMsg) (string, bool) {
