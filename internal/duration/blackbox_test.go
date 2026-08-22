@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/duration"
+	"github.com/snonux/timesamurai/internal/duration"
 )
 
 func TestParsePublicAPI(t *testing.T) {

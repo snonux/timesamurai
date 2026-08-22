@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"codeberg.org/snonux/timesamurai/internal/config"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestTimerModelToggleWorkLogin(t *testing.T) {

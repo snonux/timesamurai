@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	timesamurai "codeberg.org/snonux/timesamurai/internal"
-	"codeberg.org/snonux/timesamurai/internal/config"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	timesamurai "github.com/snonux/timesamurai/internal"
+	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 type tab int

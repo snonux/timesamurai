@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestTimerStartAndStopCommands(t *testing.T) {

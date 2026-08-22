@@ -7,10 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"codeberg.org/snonux/timesamurai/internal/ascii"
-	"codeberg.org/snonux/timesamurai/internal/config"
-	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/ascii"
+	"github.com/snonux/timesamurai/internal/config"
+	timesamuraiTimer "github.com/snonux/timesamurai/internal/timer"
+	"github.com/snonux/timesamurai/internal/worktime"
 	"github.com/common-nighthawk/go-figure"
 )
 

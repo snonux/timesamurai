@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	timesamuraiTimer "github.com/snonux/timesamurai/internal/timer"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestWorkLoginStatusLogoutFlow(t *testing.T) {

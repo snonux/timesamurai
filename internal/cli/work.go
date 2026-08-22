@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/duration"
-	"codeberg.org/snonux/timesamurai/internal/timefmt"
-	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/duration"
+	"github.com/snonux/timesamurai/internal/timefmt"
+	timesamuraiTimer "github.com/snonux/timesamurai/internal/timer"
+	"github.com/snonux/timesamurai/internal/worktime"
 	"github.com/spf13/cobra"
 )
 

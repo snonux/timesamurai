@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/config"
 )
 
 const secondsPerHour = int64(3600)

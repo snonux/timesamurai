@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"codeberg.org/snonux/timesamurai/internal/config"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestTabNavigation(t *testing.T) {

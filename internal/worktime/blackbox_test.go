@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestAddAndLoadAllPublicAPI(t *testing.T) {

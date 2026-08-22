@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/timefmt"
+	"github.com/snonux/timesamurai/internal/timefmt"
 )
 
 const importSecondsPerHour = 3600

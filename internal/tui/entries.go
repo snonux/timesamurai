@@ -12,9 +12,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"codeberg.org/snonux/timesamurai/internal/duration"
-	"codeberg.org/snonux/timesamurai/internal/timefmt"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/duration"
+	"github.com/snonux/timesamurai/internal/timefmt"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 type entryEditField int

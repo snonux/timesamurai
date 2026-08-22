@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	timesamurai "codeberg.org/snonux/timesamurai/internal"
-	"codeberg.org/snonux/timesamurai/internal/config"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	timesamurai "github.com/snonux/timesamurai/internal"
+	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 	"github.com/spf13/cobra"
 )
 

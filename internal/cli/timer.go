@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/ascii"
-	timesamuraiTimer "codeberg.org/snonux/timesamurai/internal/timer"
-	tuiapp "codeberg.org/snonux/timesamurai/internal/tui"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/ascii"
+	timesamuraiTimer "github.com/snonux/timesamurai/internal/timer"
+	tuiapp "github.com/snonux/timesamurai/internal/tui"
+	"github.com/snonux/timesamurai/internal/worktime"
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 )

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/config"
 )
 
 func TestBuildReportBalanceAndMarkers(t *testing.T) {

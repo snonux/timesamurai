@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	timesamurai "codeberg.org/snonux/timesamurai/internal"
-	"codeberg.org/snonux/timesamurai/internal/worktime"
+	timesamurai "github.com/snonux/timesamurai/internal"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestRootVersionFlag(t *testing.T) {
