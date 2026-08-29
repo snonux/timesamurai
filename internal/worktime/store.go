@@ -195,12 +195,23 @@ func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	currentIDs := make(map[int64]struct{}, len(s.byHost[host]))
+	for _, e := range s.byHost[host] {
+		currentIDs[e.ID] = struct{}{}
+	}
+	watermark := s.nextIDLocked(host)
+
 	seen := make(map[int64]struct{}, len(normalized))
 	for _, e := range normalized {
 		if _, ok := seen[e.ID]; ok {
 			return fmt.Errorf("duplicate entry id %d for host %q", e.ID, host)
 		}
 		seen[e.ID] = struct{}{}
+		if e.ID < watermark {
+			if _, ok := currentIDs[e.ID]; !ok {
+				return fmt.Errorf("entry id %d for host %q was already used", e.ID, host)
+			}
+		}
 	}
 
 	if err := s.rewriteHostLocked(ctx, host, normalized); err != nil {
@@ -406,6 +417,7 @@ func decodeEntries(r io.Reader, name string) ([]Entry, int64, error) {
 		entries []Entry
 		maxID   int64
 		lineNo  int
+		seen    = make(map[int64]struct{})
 	)
 	for {
 		line, err := br.ReadBytes('\n')
@@ -425,6 +437,10 @@ func decodeEntries(r io.Reader, name string) ([]Entry, int64, error) {
 			if entry.ID <= 0 {
 				return nil, 0, fmt.Errorf("%s:%d: entry id must be positive", name, lineNo)
 			}
+			if _, dup := seen[entry.ID]; dup {
+				return nil, 0, fmt.Errorf("%s:%d: duplicate entry id %d", name, lineNo, entry.ID)
+			}
+			seen[entry.ID] = struct{}{}
 			entries = append(entries, entry)
 			if entry.ID > maxID {
 				maxID = entry.ID

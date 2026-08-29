@@ -158,6 +158,56 @@ func TestStore_ReplaceHost(t *testing.T) {
 	if next != 3 {
 		t.Fatalf("deleted id must stay reserved: NextID=%d want 3", next)
 	}
+
+	// Reintroducing deleted id 2 must fail (same invariant as Append).
+	err = store.ReplaceHost(ctx, "mars", []Entry{
+		{ID: 1, Action: "login", Epoch: 15, Host: "mars", Tags: []string{"work"}, Descr: "fixed"},
+		{ID: 2, Action: "logout", Epoch: 20, Host: "mars", Tags: []string{"work"}},
+	})
+	if err == nil {
+		t.Fatal("ReplaceHost must not reintroduce deleted id 2")
+	}
+}
+
+func TestStore_ReplaceHostDuplicateIDs(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	err = store.ReplaceHost(ctx, "mars", []Entry{
+		{ID: 1, Action: "login", Epoch: 10, Host: "mars", Tags: []string{"work"}},
+		{ID: 1, Action: "logout", Epoch: 20, Host: "mars", Tags: []string{"work"}},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate id rejection in ReplaceHost batch")
+	}
+}
+
+func TestStore_InvalidHost(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	ctx := context.Background()
+	for _, host := range []string{"", " ../earth", "earth/x"} {
+		err := store.Append(ctx, Entry{ID: 1, Action: "login", Epoch: 1, Host: host, Tags: []string{"work"}})
+		if err == nil {
+			t.Fatalf("expected error for host %q", host)
+		}
+	}
+}
+
+func TestOpen_CanceledContext(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := Open(ctx, dir)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
 }
 
 func TestStore_IDAllocationConsidersUndo(t *testing.T) {
@@ -326,6 +376,14 @@ func TestOpen_Negatives(t *testing.T) {
 				"db.earth.jsonl": `{"id":0,"action":"login","epoch":1,"host":"earth","tags":["work"]}` + "\n",
 			},
 			wantErr: "positive",
+		},
+		{
+			name: "duplicate id on load",
+			files: map[string]string{
+				"db.earth.jsonl": `{"id":1,"action":"login","epoch":1,"host":"earth","tags":["work"]}` + "\n" +
+					`{"id":1,"action":"logout","epoch":2,"host":"earth","tags":["work"]}` + "\n",
+			},
+			wantErr: "duplicate entry id",
 		},
 		{
 			name: "torn undo line",
