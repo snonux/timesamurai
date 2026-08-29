@@ -76,3 +76,29 @@ func TestRootExtraArgs(t *testing.T) {
 		t.Errorf("err writer should be empty with SilenceErrors; got %q", errOut.String())
 	}
 }
+
+func TestCompletionFish(t *testing.T) {
+	root := newRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"completion", "fish"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("completion fish: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "# fish completion for timesamurai") {
+		t.Fatalf("missing fish completion header; got %q", got[:min(120, len(got))])
+	}
+	if !strings.HasSuffix(got, "\n") {
+		t.Fatal("fish completion should end with a newline")
+	}
+}
+
+func TestCompletionUnsupported(t *testing.T) {
+	root := newRoot()
+	root.SetArgs([]string{"completion", "tcsh"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for unsupported shell")
+	}
+}
