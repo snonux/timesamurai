@@ -238,6 +238,22 @@ func TestSaveLegacyHostMatchesRubyShape(t *testing.T) {
 	}
 }
 
+func TestSortLegacyEntriesPreservesSameEpochOrder(t *testing.T) {
+	// Ruby is stable sort_by epoch only; login then add at the same epoch must stay.
+	entries := []LegacyEntry{
+		{Action: "login", What: "work", Epoch: 100, Source: "h"},
+		{Action: "add", What: "work", Epoch: 100, Source: "h"},
+		{Action: "logout", What: "work", Epoch: 50, Source: "h"},
+	}
+	sortLegacyEntries(entries)
+	if entries[0].Action != "logout" || entries[0].Epoch != 50 {
+		t.Fatalf("expected logout first, got %+v", entries[0])
+	}
+	if entries[1].Action != "login" || entries[2].Action != "add" {
+		t.Fatalf("same-epoch order not preserved: %+v %+v", entries[1], entries[2])
+	}
+}
+
 func TestSaveLegacyHostAndLoadLegacyHostRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	dbDir := filepath.Join(t.TempDir(), "nested", "db")
@@ -371,6 +387,13 @@ func TestLoadLegacyNegatives(t *testing.T) {
 				return SaveLegacyHost(ctx, t.TempDir(), "", LegacyDB{})
 			},
 			wantErr: "hostname must not be empty",
+		},
+		{
+			name: "SaveLegacyHost path-unsafe hostname",
+			call: func(t *testing.T) error {
+				return SaveLegacyHost(ctx, t.TempDir(), "../escape", LegacyDB{})
+			},
+			wantErr: "invalid hostname",
 		},
 		{
 			name: "SaveLegacyHost empty dir",

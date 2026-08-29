@@ -257,8 +257,22 @@ func SaveLegacyHost(ctx context.Context, dbDir, hostname string, db LegacyDB) er
 	}
 
 	dbFile := filepath.Join(dbDir, legacyDBFileName(host))
-	if err := os.WriteFile(dbFile, data, 0o644); err != nil {
-		return fmt.Errorf("write db file %q: %w", dbFile, err)
+	tmp, err := os.CreateTemp(dbDir, legacyDBFileName(host)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp db file for host %q: %w", host, err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temp db file %q: %w", tmpName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp db file %q: %w", tmpName, err)
+	}
+	if err := os.Rename(tmpName, dbFile); err != nil {
+		return fmt.Errorf("install db file %q: %w", dbFile, err)
 	}
 	return nil
 }
@@ -292,17 +306,16 @@ func loadLegacyFile(dbFile string) (LegacyDB, error) {
 }
 
 func sortLegacyEntries(entries []LegacyEntry) {
+	// Match worktime.rb: stable sort by epoch only (no secondary key).
 	slices.SortStableFunc(entries, func(a, b LegacyEntry) int {
-		if a.Epoch != b.Epoch {
-			if a.Epoch < b.Epoch {
-				return -1
-			}
+		switch {
+		case a.Epoch < b.Epoch:
+			return -1
+		case a.Epoch > b.Epoch:
 			return 1
+		default:
+			return 0
 		}
-		if a.Source != b.Source {
-			return strings.Compare(a.Source, b.Source)
-		}
-		return strings.Compare(a.Action, b.Action)
 	})
 }
 
@@ -310,6 +323,9 @@ func normalizeLegacyHostname(hostname string) (string, error) {
 	host := strings.TrimSpace(hostname)
 	if host == "" {
 		return "", errors.New("hostname must not be empty")
+	}
+	if strings.ContainsAny(host, "/\\") || strings.Contains(host, "..") {
+		return "", fmt.Errorf("invalid hostname %q", host)
 	}
 	return host, nil
 }
