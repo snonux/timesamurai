@@ -1,6 +1,8 @@
 // Package config loads sectioned TOML settings for timesamurai.
 package config
 
+import "io"
+
 // Config holds runtime settings loaded from defaults, config.toml, and env.
 type Config struct {
 	Storage    StorageConfig
@@ -42,6 +44,9 @@ type LoadOptions struct {
 	IgnoreEnv bool
 	// ConfigPath overrides the global config file path (e.g. via --config).
 	ConfigPath string
+	// NoticeWriter receives one-line notices (e.g. legacy JSON ignored).
+	// When nil, notices go to os.Stderr.
+	NoticeWriter io.Writer
 }
 
 // fileConfig is the TOML decode target. Section tables only; flat keys are rejected.

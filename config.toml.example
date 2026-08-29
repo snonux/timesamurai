@@ -1,0 +1,34 @@
+# timesamurai sectioned config example
+#
+# Location: $XDG_CONFIG_HOME/timesamurai/config.toml
+# (usually ~/.config/timesamurai/config.toml)
+#
+# Copy this file into place and edit. Environment variables (TIMESAMURAI_*)
+# always take precedence over the file. See docs/configuration.md.
+#
+# There is no per-project config layer (unlike hexai's .hexaiconfig.toml).
+
+[storage]
+# Where the JSONL store lives. Deployed value is a subdirectory of the worktime
+# repo so it syncs with everything else. Defaults to db_dir when unset.
+store_dir = "~/git/worktime/timesamuraidb"
+
+# Where worktime.rb's db.*.json live: the migration source, and the target of
+# the one-way export that keeps `worktime.rb --report` working.
+db_dir = "~/git/worktime"
+
+[accounting]
+week_work_hours = 40
+plus_for   = ["off", "bank", "bufferuse", "sick"]
+minus_for  = ["lunch"]
+buffer_for = ["tools", "pet", "selfdevelopment", "workrebalance",
+              "compensate", "travel", "rebalance"]
+weekend_days = ["Sat", "Sun"]
+
+[general]
+hostname = ""                  # override the detected hostname
+auto_worktime_login = false
+
+[report]
+color = true
+verbose = false
