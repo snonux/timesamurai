@@ -32,11 +32,17 @@ func Load(ctx context.Context, opts LoadOptions) (Config, error) {
 	}
 	if fileOverlay != nil {
 		cfg.mergeWith(fileOverlay)
+		applyStoreDirFallback(&cfg, fileOverlay)
 	}
 
 	if !opts.IgnoreEnv {
-		if envOverlay := loadOverlayFromEnv(); envOverlay != nil {
+		envOverlay, err := loadOverlayFromEnv()
+		if err != nil {
+			return cfg, err
+		}
+		if envOverlay != nil {
 			cfg.mergeWith(envOverlay)
+			applyStoreDirFallback(&cfg, envOverlay)
 		}
 	}
 
@@ -47,6 +53,15 @@ func Load(ctx context.Context, opts LoadOptions) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// applyStoreDirFallback clears store_dir when an overlay sets db_dir but not
+// store_dir, so normalize can copy db_dir into store_dir ("defaults to db_dir
+// when unset").
+func applyStoreDirFallback(cfg *Config, ov *overlay) {
+	if ov.Storage.DBDir != nil && ov.Storage.StoreDir == nil {
+		cfg.Storage.StoreDir = ""
+	}
 }
 
 // ConfigPath returns $XDG_CONFIG_HOME/timesamurai/config.toml, falling back to
@@ -87,7 +102,7 @@ func loadOverlayFromFile(path string) (*overlay, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
-	if err := rejectUnknownTopLevel(raw); err != nil {
+	if err := rejectUnknownKeys(raw); err != nil {
 		return nil, fmt.Errorf("config %q: %w", path, err)
 	}
 	return tables.toOverlay(), nil
@@ -105,15 +120,40 @@ func decodeTOML(data []byte) (*fileConfig, map[string]any, error) {
 	return &tables, raw, nil
 }
 
-func rejectUnknownTopLevel(raw map[string]any) error {
-	known := map[string]struct{}{
+func rejectUnknownKeys(raw map[string]any) error {
+	knownTop := map[string]struct{}{
 		"storage": {}, "accounting": {}, "general": {}, "report": {},
 	}
-	for key := range raw {
-		if _, ok := known[key]; ok {
-			continue
+	knownSections := map[string]map[string]struct{}{
+		"storage": {
+			"store_dir": {}, "db_dir": {},
+		},
+		"accounting": {
+			"week_work_hours": {}, "plus_for": {}, "minus_for": {},
+			"buffer_for": {}, "weekend_days": {},
+		},
+		"general": {
+			"hostname": {}, "auto_worktime_login": {},
+		},
+		"report": {
+			"color": {}, "verbose": {},
+		},
+	}
+
+	for key, value := range raw {
+		if _, ok := knownTop[key]; !ok {
+			return fmt.Errorf("unsupported top-level key %q; use sectioned tables [storage], [accounting], [general], [report]", key)
 		}
-		return fmt.Errorf("unsupported top-level key %q; use sectioned tables [storage], [accounting], [general], [report]", key)
+		section, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("top-level key %q must be a table", key)
+		}
+		allowed := knownSections[key]
+		for nested := range section {
+			if _, ok := allowed[nested]; !ok {
+				return fmt.Errorf("unsupported key %q.%q", key, nested)
+			}
+		}
 	}
 	return nil
 }
@@ -137,8 +177,8 @@ func applyStorageSection(fc *fileConfig, out *overlay) {
 }
 
 func applyAccountingSection(fc *fileConfig, out *overlay) {
-	if fc.Accounting.WeekWorkHours != 0 {
-		v := fc.Accounting.WeekWorkHours
+	if fc.Accounting.WeekWorkHours != nil {
+		v := *fc.Accounting.WeekWorkHours
 		out.Accounting.WeekWorkHours = &v
 	}
 	if fc.Accounting.PlusFor != nil {

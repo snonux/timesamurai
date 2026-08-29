@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -31,6 +32,9 @@ func validateStorage(s StorageConfig) error {
 }
 
 func validateAccounting(a AccountingConfig) error {
+	if math.IsNaN(a.WeekWorkHours) || math.IsInf(a.WeekWorkHours, 0) {
+		return fmt.Errorf("config: accounting.week_work_hours must be a finite number, got %v", a.WeekWorkHours)
+	}
 	if a.WeekWorkHours <= 0 {
 		return fmt.Errorf("config: accounting.week_work_hours must be > 0, got %v", a.WeekWorkHours)
 	}

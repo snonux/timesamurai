@@ -58,7 +58,7 @@ type sectionStorage struct {
 }
 
 type sectionAccounting struct {
-	WeekWorkHours float64  `toml:"week_work_hours"`
+	WeekWorkHours *float64 `toml:"week_work_hours"`
 	PlusFor       []string `toml:"plus_for"`
 	MinusFor      []string `toml:"minus_for"`
 	BufferFor     []string `toml:"buffer_for"`

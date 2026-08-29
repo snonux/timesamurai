@@ -239,6 +239,107 @@ func TestLoad_StoreDirDefaultsToDBDir(t *testing.T) {
 	}
 }
 
+func TestLoad_OnlyDBDirInFileFallsBackStore(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+[storage]
+db_dir = "/tmp/only-db"
+
+[accounting]
+week_work_hours = 40
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`)
+	cfg, err := Load(context.Background(), LoadOptions{ConfigPath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Storage.DBDir != "/tmp/only-db" {
+		t.Fatalf("db_dir: %q", cfg.Storage.DBDir)
+	}
+	if cfg.Storage.StoreDir != "/tmp/only-db" {
+		t.Fatalf("store_dir should fall back to db_dir, got %q", cfg.Storage.StoreDir)
+	}
+}
+
+func TestLoad_WeekWorkHoursZeroRejected(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+[storage]
+db_dir = "/tmp/db"
+store_dir = "/tmp/store"
+[accounting]
+week_work_hours = 0
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`)
+	_, err := Load(context.Background(), LoadOptions{ConfigPath: path})
+	if err == nil || !strings.Contains(err.Error(), "week_work_hours must be > 0") {
+		t.Fatalf("got %v, want week_work_hours error", err)
+	}
+}
+
+func TestLoad_BadEnvFails(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+[storage]
+db_dir = "/tmp/db"
+store_dir = "/tmp/store"
+[accounting]
+week_work_hours = 40
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`)
+	t.Setenv("TIMESAMURAI_WEEK_WORK_HOURS", "abc")
+	_, err := Load(context.Background(), LoadOptions{ConfigPath: path})
+	if err == nil || !strings.Contains(err.Error(), "TIMESAMURAI_WEEK_WORK_HOURS") {
+		t.Fatalf("got %v, want env float error", err)
+	}
+
+	t.Setenv("TIMESAMURAI_WEEK_WORK_HOURS", "NaN")
+	_, err = Load(context.Background(), LoadOptions{ConfigPath: path})
+	if err == nil || !strings.Contains(err.Error(), "non-finite") {
+		t.Fatalf("got %v, want non-finite error", err)
+	}
+}
+
+func TestLoad_BoolEnvCaseInsensitive(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+[storage]
+db_dir = "/tmp/db"
+store_dir = "/tmp/store"
+[accounting]
+week_work_hours = 40
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`)
+	t.Setenv("TIMESAMURAI_COLOR", "TRUE")
+	t.Setenv("TIMESAMURAI_VERBOSE", "NO")
+	cfg, err := Load(context.Background(), LoadOptions{ConfigPath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Report.Color {
+		t.Fatal("TRUE should enable color")
+	}
+	if cfg.Report.Verbose {
+		t.Fatal("NO should disable verbose")
+	}
+}
+
 func TestLoad_NegativeCases(t *testing.T) {
 	clearTimesamuraiEnv(t)
 	dir := t.TempDir()
@@ -284,6 +385,38 @@ buffer_for = ["pet"]
 weekend_days = ["Sat"]
 `,
 			wantSub: "week_work_hours must be > 0",
+		},
+		{
+			name: "unknown nested key",
+			content: `
+[storage]
+db_dir = "/tmp/db"
+store_dir = "/tmp/store"
+store_dri = "/tmp/typo"
+[accounting]
+week_work_hours = 40
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`,
+			wantSub: `unsupported key "storage"."store_dri"`,
+		},
+		{
+			name: "invalid bool env",
+			content: `
+[storage]
+db_dir = "/tmp/db"
+store_dir = "/tmp/store"
+[accounting]
+week_work_hours = 40
+plus_for = ["off"]
+minus_for = ["lunch"]
+buffer_for = ["pet"]
+weekend_days = ["Sat"]
+`,
+			env:     map[string]string{"TIMESAMURAI_COLOR": "maybe"},
+			wantSub: "TIMESAMURAI_COLOR",
 		},
 		{
 			name: "empty plus_for",
