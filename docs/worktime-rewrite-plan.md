@@ -392,7 +392,7 @@ generate-only into `completions/timesamurai.fish` — no prompt function.
 Cobra's fish output drives dynamic completion through the hidden `__complete`, so wire these
 up in `internal/cli/complete.go`:
 
-- **tags** — accounting categories from `config.json`, plus distinct tags already in the store
+- **tags** — accounting categories from config (TOML `accounting` section), plus distinct tags already in the store
 - **`<host>:<id>`** — recent entries, with date and description as the completion
   description, which fish renders in the candidate list
 - **ranges** — `today`, `yesterday`, `week`, `lastweek`, `month`
@@ -564,8 +564,8 @@ migration work happens on `/tmp/wt-scratch` until the round-trip test passes.
 ## Task list
 
 28 tasks created in `~/git/timesamurai` via `ask`, each tagged, dependency-linked, carrying
-the agent-workflow annotation, and referencing this plan. Only `871` is ready; everything
-else unblocks behind it.
+the agent-workflow annotation, and referencing this plan. Bootstrap `871` is done;
+`h61` (this plan copy) unblocks the next wave — run `ask ready` to see what is open.
 
 | Wave | IDs | Tag | What |
 |---|---|---|---|
@@ -580,8 +580,9 @@ else unblocks behind it.
 | Tests | `171` `271` `371` | tests | Port the existing spec; golden parity + round-trip; new store internals |
 | Finish | `571` `471` `671` `771` | completions, build, docs, cleanup | Cobra completions; Mage targets; README coexistence rules; delete old code + version bump |
 
-Start with `ask start 871`. Run `ask ready` after each completion to pick up whatever
-unblocked. Tasks `871`, `o61`, `p61`, `s61`, `u61`, `i61`, `l61` and `171` each carry an
+Start with `ask ready` (or `ask start <id>` on the highest-urgency ready task). Run
+`ask ready` after each completion to pick up whatever unblocked. Tasks `871`, `o61`,
+`p61`, `s61`, `u61`, `i61`, `l61` and `171` each carry an
 annotation naming their specific reuse candidate at the `pre-rewrite` tag.
 
 ## Out of scope
