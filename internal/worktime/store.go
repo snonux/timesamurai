@@ -177,7 +177,8 @@ func (s *Store) Append(ctx context.Context, entry Entry) error {
 // ReplaceHost rewrites db.<host>.jsonl with entries via temp + fsync + rename.
 // Entries are sorted by epoch before writing. Ids already allocated stay reserved
 // even when the replacement omits them. Deleted ids below the next-id watermark
-// cannot be reintroduced here; undo restore uses replaceHostRestoringLocked.
+// cannot be reintroduced here; undo restore calls replaceHostLocked directly with
+// allowRestore set, bypassing this guard.
 func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) error {
 	if err := ctx.Err(); err != nil {
 		return err
