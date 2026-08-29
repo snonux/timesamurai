@@ -88,15 +88,13 @@ func writeJSONIgnoredNotice(notice io.Writer, jsonPath, tomlPath string) {
 	if notice == nil {
 		return
 	}
+	// Intentional: remind on every Load while both files remain (spec: TOML wins,
+	// leave JSON in place until the user removes it).
 	_, _ = fmt.Fprintf(notice, "timesamurai: ignoring legacy %s; using %s\n", jsonPath, tomlPath)
 }
 
 func migrateJSONToTOML(ctx context.Context, jsonPath, tomlPath string) error {
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("config migrate cancelled: %w", err)
-		}
-	}
+	_ = ctx // cancellation already checked by maybeMigrateLegacyJSON
 
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
@@ -113,13 +111,28 @@ func migrateJSONToTOML(ctx context.Context, jsonPath, tomlPath string) error {
 		return fmt.Errorf("encode migrated config: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(tomlPath), 0o755); err != nil {
+	dir := filepath.Dir(tomlPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create config directory for %q: %w", tomlPath, err)
 	}
 
 	out := append([]byte(migrateHeader), encoded...)
-	if err := os.WriteFile(tomlPath, out, 0o644); err != nil {
-		return fmt.Errorf("write migrated config %q: %w", tomlPath, err)
+	tmp, err := os.CreateTemp(dir, "config.toml.*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp migrated config: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(out); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temp migrated config %q: %w", tmpName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp migrated config %q: %w", tmpName, err)
+	}
+	if err := os.Rename(tmpName, tomlPath); err != nil {
+		return fmt.Errorf("install migrated config %q: %w", tomlPath, err)
 	}
 	return nil
 }
