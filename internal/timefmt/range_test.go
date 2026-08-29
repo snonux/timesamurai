@@ -59,6 +59,18 @@ func TestParseRangeAtValid(t *testing.T) {
 			end:   time.Date(2026, 8, 8, 0, 0, 0, 0, loc),
 		},
 		{
+			name:  "date span with spaces",
+			input: "2026-08-01 .. 2026-08-07",
+			start: time.Date(2026, 8, 1, 0, 0, 0, 0, loc),
+			end:   time.Date(2026, 8, 8, 0, 0, 0, 0, loc),
+		},
+		{
+			name:  "keyword case",
+			input: "Week",
+			start: time.Date(2026, 8, 24, 0, 0, 0, 0, loc),
+			end:   time.Date(2026, 8, 31, 0, 0, 0, 0, loc),
+		},
+		{
 			name:  "single day span",
 			input: "2026-08-25..2026-08-25",
 			start: time.Date(2026, 8, 25, 0, 0, 0, 0, loc),
@@ -124,12 +136,19 @@ func TestParseRangeInvalid(t *testing.T) {
 }
 
 func TestParseRangeUsesNow(t *testing.T) {
-	got, err := ParseRange("today")
+	now := time.Date(2026, 8, 29, 15, 30, 0, 0, time.Local)
+	got, err := ParseRangeAt("today", now)
 	if err != nil {
-		t.Fatalf("ParseRange(today) error = %v", err)
+		t.Fatalf("ParseRangeAt(today) error = %v", err)
 	}
-	start := startOfDay(time.Now())
+	start := startOfDay(now)
 	if !got.Start.Equal(start) || !got.End.Equal(start.AddDate(0, 0, 1)) {
-		t.Fatalf("ParseRange(today) = [%v, %v), want today", got.Start, got.End)
+		t.Fatalf("ParseRangeAt(today) = [%v, %v), want today", got.Start, got.End)
+	}
+}
+
+func TestParseRangeWrapper(t *testing.T) {
+	if _, err := ParseRange("today"); err != nil {
+		t.Fatalf("ParseRange(today) error = %v", err)
 	}
 }

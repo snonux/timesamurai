@@ -40,9 +40,29 @@ func TestParseTimeAtValid(t *testing.T) {
 			want:  now.Add(-2 * time.Hour),
 		},
 		{
+			name:  "relative hours ahead",
+			input: "+2h",
+			want:  now.Add(2 * time.Hour),
+		},
+		{
+			name:  "relative uppercase",
+			input: "-2H",
+			want:  now.Add(-2 * time.Hour),
+		},
+		{
+			name:  "keyword case",
+			input: "Today",
+			want:  time.Date(2026, 8, 25, 0, 0, 0, 0, loc),
+		},
+		{
 			name:  "relative mixed",
 			input: "-1h30m",
 			want:  now.Add(-90 * time.Minute),
+		},
+		{
+			name:  "leading fraction offset",
+			input: "-.5h",
+			want:  now.Add(-30 * time.Minute),
 		},
 		{
 			name:  "datetime minutes",
@@ -95,6 +115,7 @@ func TestParseTimeInvalid(t *testing.T) {
 		"25:00",
 		"09:60",
 		"1h30x",
+		"1hxxx",
 	}
 
 	for _, input := range inputs {
@@ -131,12 +152,19 @@ func TestParseEpochInvalid(t *testing.T) {
 }
 
 func TestParseTimeUsesNow(t *testing.T) {
-	got, err := ParseTime("today")
+	now := time.Date(2026, 8, 29, 15, 30, 0, 0, time.Local)
+	got, err := ParseTimeAt("today", now)
 	if err != nil {
-		t.Fatalf("ParseTime(today) error = %v", err)
+		t.Fatalf("ParseTimeAt(today) error = %v", err)
 	}
-	want := startOfDay(time.Now())
+	want := startOfDay(now)
 	if !got.Equal(want) {
-		t.Fatalf("ParseTime(today) = %v, want %v", got, want)
+		t.Fatalf("ParseTimeAt(today) = %v, want %v", got, want)
+	}
+}
+
+func TestParseTimeWrapper(t *testing.T) {
+	if _, err := ParseTime("today"); err != nil {
+		t.Fatalf("ParseTime(today) error = %v", err)
 	}
 }

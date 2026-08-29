@@ -13,8 +13,10 @@ var yearMonthPattern = regexp.MustCompile(`^(\d{4})-(\d{2})$`)
 
 // Range is a half-open time interval [Start, End).
 type Range struct {
+	// Start is the inclusive lower bound of the range.
 	Start time.Time
-	End   time.Time
+	// End is the exclusive upper bound of the range.
+	End time.Time
 }
 
 // ParseRange converts range text into a half-open interval using time.Now().

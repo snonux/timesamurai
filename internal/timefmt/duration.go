@@ -3,6 +3,7 @@ package timefmt
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,14 +12,10 @@ import (
 
 var bareIntegerPattern = regexp.MustCompile(`^[+-]?\d+$`)
 
-const (
-	maxInt64 = int64(^uint64(0) >> 1)
-	minInt64 = -maxInt64 - 1
-)
-
 // ParseDuration converts duration text into a time.Duration.
 // Bare integers are seconds (legacy worktime.rb default). Suffixed forms such
-// as 30m, 1h, 1h30m, 2.5h, and 45s use Go's duration syntax.
+// as 30m, 1h, 1h30m, 2.5h, and 45s use Go's duration syntax (unit letters are
+// case-insensitive).
 func ParseDuration(value string) (time.Duration, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -30,13 +27,13 @@ func ParseDuration(value string) (time.Duration, error) {
 		if err != nil {
 			return 0, fmt.Errorf("parse seconds %q: %w", value, err)
 		}
-		if seconds > maxInt64/int64(time.Second) || seconds < minInt64/int64(time.Second) {
+		if seconds > math.MaxInt64/int64(time.Second) || seconds < math.MinInt64/int64(time.Second) {
 			return 0, fmt.Errorf("duration seconds %q overflows time.Duration", value)
 		}
 		return time.Duration(seconds) * time.Second, nil
 	}
 
-	parsed, err := time.ParseDuration(trimmed)
+	parsed, err := time.ParseDuration(strings.ToLower(trimmed))
 	if err != nil {
 		return 0, fmt.Errorf("parse duration %q: %w", value, err)
 	}

@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	clockPattern        = regexp.MustCompile(`^(\d{1,2}):(\d{2})(?::(\d{2}))?$`)
-	durationLikePattern = regexp.MustCompile(`^[+-]?(\d+(\.\d+)?[hms])+`)
+	clockPattern = regexp.MustCompile(`^(\d{1,2}):(\d{2})(?::(\d{2}))?$`)
+	// Leading optional fraction (.5h) or digits; units case-folded before match.
+	durationLikePattern = regexp.MustCompile(`^[+-]?((\d+(\.\d*)?|\.\d+)[hms])+$`)
 )
 
 var localLayouts = []string{

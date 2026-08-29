@@ -21,6 +21,10 @@ func TestParseDurationValid(t *testing.T) {
 		{name: "fractional hours", input: "2.5h", want: 150 * time.Minute},
 		{name: "seconds suffix", input: "45s", want: 45 * time.Second},
 		{name: "negative suffixed", input: "-1h", want: -time.Hour},
+		{name: "uppercase hours", input: "1H", want: time.Hour},
+		{name: "uppercase fractional", input: "2.5H", want: 150 * time.Minute},
+		{name: "uppercase minutes", input: "30M", want: 30 * time.Minute},
+		{name: "leading fraction", input: ".5h", want: 30 * time.Minute},
 	}
 
 	for _, test := range tests {
@@ -43,9 +47,11 @@ func TestParseDurationInvalid(t *testing.T) {
 		"   ",
 		"abc",
 		"1h30x",
+		"1hxxx",
 		"h30m",
 		"9223372036854775807",
 		"-9223372036854775808",
+		"9223372036854775808",
 	}
 
 	for _, input := range inputs {
