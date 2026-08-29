@@ -176,7 +176,8 @@ func (s *Store) Append(ctx context.Context, entry Entry) error {
 
 // ReplaceHost rewrites db.<host>.jsonl with entries via temp + fsync + rename.
 // Entries are sorted by epoch before writing. Ids already allocated stay reserved
-// even when the replacement omits them.
+// even when the replacement omits them. Deleted ids below the next-id watermark
+// cannot be reintroduced here; undo restore uses replaceHostRestoringLocked.
 func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -195,6 +196,13 @@ func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.replaceHostLocked(ctx, host, normalized, false)
+}
+
+// replaceHostLocked rewrites the host file. When allowRestore is true, ids below
+// the watermark that are absent from the current set may be reintroduced (undo
+// of delete). Callers must hold s.mu and pass normalized, epoch-sorted entries.
+func (s *Store) replaceHostLocked(ctx context.Context, host string, normalized []Entry, allowRestore bool) error {
 	currentIDs := make(map[int64]struct{}, len(s.byHost[host]))
 	for _, e := range s.byHost[host] {
 		currentIDs[e.ID] = struct{}{}
@@ -208,7 +216,7 @@ func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) e
 		}
 		seen[e.ID] = struct{}{}
 		if e.ID < watermark {
-			if _, ok := currentIDs[e.ID]; !ok {
+			if _, ok := currentIDs[e.ID]; !ok && !allowRestore {
 				return fmt.Errorf("entry id %d for host %q was already used", e.ID, host)
 			}
 		}
