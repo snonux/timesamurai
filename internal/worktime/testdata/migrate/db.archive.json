@@ -1,0 +1,30 @@
+{
+  "entries": {
+    "mc-lon-mb8477": [
+      {
+        "action": "add",
+        "what": "work",
+        "epoch": 1504479600,
+        "human": "Mon 04.09.2017",
+        "value": 35208
+      },
+      {
+        "action": "add",
+        "what": "selfdevelopment",
+        "epoch": 1504480000,
+        "human": "Mon 04.09.2017",
+        "value": -7200
+      }
+    ],
+    "galaxytabs6": [
+      {
+        "action": "add",
+        "what": "selfdevelopment",
+        "epoch": 1608584566,
+        "human": "Mon 21.12.2020 21:02:46",
+        "value": 3600,
+        "descr": "notes"
+      }
+    ]
+  }
+}
