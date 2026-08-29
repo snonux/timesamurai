@@ -1,5 +1,3 @@
-// Package worktime models work-time log entries and tag accounting rules.
-//
-// Persistence, reporting, and CLI wiring live in sibling files added later;
-// this package starts with the Entry type and tag validation only.
+// Package worktime models work-time log entries, tag accounting rules, and the
+// per-host JSONL store (db.<host>.jsonl) used for persistence.
 package worktime
