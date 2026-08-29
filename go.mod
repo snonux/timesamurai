@@ -4,6 +4,7 @@ go 1.24.3
 
 require (
 	github.com/magefile/mage v1.15.0
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/spf13/cobra v1.10.2
 )
 
