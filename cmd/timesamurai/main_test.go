@@ -1,0 +1,78 @@
+package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/snonux/timesamurai/internal"
+)
+
+func TestRootHelp(t *testing.T) {
+	root := newRoot()
+	var out, errOut bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&errOut)
+	root.SetArgs([]string{"--help"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(--help): %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"Usage:", "timesamurai", "--version"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("help missing %q; got:\n%s", want, got)
+		}
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("stderr should be empty on help, got %q", errOut.String())
+	}
+}
+
+func TestRootVersion(t *testing.T) {
+	root := newRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(--version): %v", err)
+	}
+	got := strings.TrimSpace(out.String())
+	if got != internal.Version {
+		t.Errorf("version = %q, want %q", got, internal.Version)
+	}
+}
+
+func TestRootUnknownFlag(t *testing.T) {
+	root := newRoot()
+	var errOut bytes.Buffer
+	root.SetErr(&errOut)
+	root.SetArgs([]string{"--nosuch"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("error = %v, want unknown flag", err)
+	}
+	// SilenceErrors: cobra must not also write the error to its err writer.
+	if errOut.Len() != 0 {
+		t.Errorf("err writer should be empty with SilenceErrors; got %q", errOut.String())
+	}
+}
+
+func TestRootExtraArgs(t *testing.T) {
+	root := newRoot()
+	var errOut bytes.Buffer
+	root.SetErr(&errOut)
+	root.SetArgs([]string{"bogus-subcommand"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error for unexpected args")
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Errorf("error = %v, want unknown command", err)
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("err writer should be empty with SilenceErrors; got %q", errOut.String())
+	}
+}
