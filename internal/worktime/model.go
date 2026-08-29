@@ -22,14 +22,16 @@ const (
 var ErrMultipleAccountingTags = errors.New("multiple accounting tags")
 
 // Entry is one JSONL work-time event for a host.
+// JSON field order matches the on-disk plan examples for stable diffs:
+// id, action, epoch, host, value, tags, descr.
 type Entry struct {
 	ID     int64    `json:"id"`
-	Host   string   `json:"host"`
 	Action string   `json:"action"`
 	Epoch  int64    `json:"epoch"`
+	Host   string   `json:"host"`
 	Value  int64    `json:"value,omitempty"`
-	Descr  string   `json:"descr,omitempty"`
 	Tags   []string `json:"tags,omitempty"`
+	Descr  string   `json:"descr,omitempty"`
 }
 
 // TagClass describes how a tag maps to accounting configuration lists.

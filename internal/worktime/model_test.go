@@ -1,6 +1,7 @@
 package worktime
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -102,6 +103,22 @@ func TestAccountingTag(t *testing.T) {
 			errIsMult: true,
 		},
 		{
+			name:      "buffer before primary is rejected",
+			tags:      []string{"selfdevelopment", "work"},
+			wantErr:   true,
+			errIsMult: true,
+		},
+		{
+			name: "minusfor lunch",
+			tags: []string{"lunch"},
+			want: "lunch",
+		},
+		{
+			name: "lunch with buffer label",
+			tags: []string{"lunch", "pet"},
+			want: "lunch",
+		},
+		{
 			name:    "duplicate tag",
 			tags:    []string{"work", "work"},
 			wantErr: true,
@@ -166,12 +183,12 @@ func TestValidateEntry(t *testing.T) {
 
 	valid := Entry{
 		ID:     1,
-		Host:   "earth",
 		Action: "add",
 		Epoch:  1787951450,
+		Host:   "earth",
 		Value:  7200,
-		Descr:  "Wrote up the observability post",
 		Tags:   []string{"work", "blogpost"},
+		Descr:  "Wrote up the observability post",
 	}
 
 	tests := []struct {
@@ -181,9 +198,24 @@ func TestValidateEntry(t *testing.T) {
 	}{
 		{name: "valid add", entry: valid},
 		{
+			name: "valid add with negative value",
+			entry: func() Entry {
+				e := valid
+				e.Value = -3600
+				e.Tags = []string{"selfdevelopment"}
+				return e
+			}(),
+		},
+		{
 			name: "valid login",
 			entry: Entry{
-				ID: 2, Host: "earth", Action: "login", Epoch: 1787917475, Tags: []string{"work"},
+				ID: 2, Action: "login", Epoch: 1787917475, Host: "earth", Tags: []string{"work"},
+			},
+		},
+		{
+			name: "valid logout",
+			entry: Entry{
+				ID: 4, Action: "logout", Epoch: 1787917547, Host: "earth", Tags: []string{"work"},
 			},
 		},
 		{
@@ -225,9 +257,16 @@ func TestValidateEntry(t *testing.T) {
 		{
 			name: "login with value",
 			entry: Entry{
-				ID: 3, Host: "earth", Action: "login", Epoch: 1, Value: 60, Tags: []string{"work"},
+				ID: 3, Action: "login", Epoch: 1, Host: "earth", Value: 60, Tags: []string{"work"},
 			},
 			wantErr: `action "login" must not carry value`,
+		},
+		{
+			name: "logout with value",
+			entry: Entry{
+				ID: 5, Action: "logout", Epoch: 1, Host: "earth", Value: 60, Tags: []string{"work"},
+			},
+			wantErr: `action "logout" must not carry value`,
 		},
 		{
 			name: "two accounting tags",
@@ -256,5 +295,26 @@ func TestValidateEntry(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestEntryJSONFieldOrder(t *testing.T) {
+	entry := Entry{
+		ID:     412,
+		Action: "add",
+		Epoch:  1787951450,
+		Host:   "earth",
+		Value:  7200,
+		Tags:   []string{"work", "blogpost"},
+		Descr:  "Wrote up the observability post",
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPrefix := `{"id":412,"action":"add","epoch":1787951450,"host":"earth","value":7200,"tags":["work","blogpost"],"descr":`
+	got := string(data)
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("JSON field order mismatch:\n got %s\nwant prefix %s", got, wantPrefix)
 	}
 }
