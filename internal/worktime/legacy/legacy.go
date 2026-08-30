@@ -65,7 +65,10 @@ func (e *LegacyEntry) ClearValue() {
 }
 
 // HasValue reports whether a value field should be written.
-func (e LegacyEntry) HasValue() bool {
+// Pointer receiver for consistency with the other LegacyEntry methods
+// (UnmarshalJSON must be a pointer receiver to mutate the receiver, so all
+// methods on this type use pointer receivers per Go convention).
+func (e *LegacyEntry) HasValue() bool {
 	return e.valueSet
 }
 
@@ -123,7 +126,13 @@ func (e *LegacyEntry) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalJSON writes fields in worktime.rb insert order.
-func (e LegacyEntry) MarshalJSON() ([]byte, error) {
+// Pointer receiver for consistency with the other LegacyEntry methods; see
+// HasValue's comment. Slice elements (e.g. []LegacyEntry) are addressable in
+// Go, so encoding/json still finds and uses this method when marshaling a
+// LegacyEntry stored in a slice or map-of-slice — only marshaling a bare,
+// non-addressable LegacyEntry value directly would silently fall back to
+// default struct encoding instead of failing to compile.
+func (e *LegacyEntry) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.Grow(128)
 	buf.WriteByte('{')

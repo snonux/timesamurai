@@ -127,7 +127,7 @@ func TestLegacyEntryMarshalJSONKeyOrder(t *testing.T) {
 	}
 	entry.SetValue(7200)
 
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(&entry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestLegacyEntryMarshalJSONOmitsUnsetValueAndDescr(t *testing.T) {
 		Source: "earth",
 		Human:  "h",
 	}
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(&entry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestLegacyEntryMarshalJSONZeroValue(t *testing.T) {
 	}
 	entry.SetValue(0)
 
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(&entry)
 	if err != nil {
 		t.Fatal(err)
 	}
