@@ -50,11 +50,42 @@ type MigrateFinding struct {
 	Detail string
 }
 
+// MigrateHostFailure names one host whose migration attempt failed, and why.
+// Migrate collects these instead of aborting the whole run on the first host
+// error, so a mid-run failure (in practice: a genuine I/O error inside
+// Store.ReplaceHost, since every "bad data" case is already preflighted
+// before any host is written — see Migrate's doc comment) never leaves the
+// caller unsure which hosts actually landed (task j81). This is distinct
+// from the --force id-gap bug fixed by task 481 and the unknown-action
+// quarantine added by task 781; those two already close off the failure
+// modes that used to make retries or malformed rows dangerous.
+type MigrateHostFailure struct {
+	Host string
+	Err  error
+}
+
+// Error satisfies the error interface so a MigrateHostFailure can be used
+// directly as one of errors.Join's arguments in partialMigrateError.
+func (f MigrateHostFailure) Error() string {
+	return fmt.Sprintf("host %q: %v", f.Host, f.Err)
+}
+
+// Unwrap exposes the underlying store/id error so errors.Is/As can still
+// reach it (e.g. a caller checking for a specific sentinel) through the
+// joined error partialMigrateError returns.
+func (f MigrateHostFailure) Unwrap() error { return f.Err }
+
 // MigrateResult summarizes hosts written and findings reported.
+//
+// Hosts and Failed are both always populated on a partial-failure run, so a
+// caller — including the CLI's report, via writeMigrateReport — can tell
+// which hosts landed in the store and which didn't without having to parse
+// the returned error string (task j81).
 type MigrateResult struct {
 	Hosts    []string
 	Entries  int
 	Findings []MigrateFinding
+	Failed   []MigrateHostFailure
 }
 
 // String returns a single-line description of the finding.
@@ -94,58 +125,140 @@ func (f MigrateFinding) String() string {
 //   - one unpaired/superseded earth login at epoch 1781618168 (4377 logins vs 4376 logouts)
 //   - 11 add entries with value==0 across hosts
 //   - 243 negative selfdevelopment entries (−829.96h), imported as signed values
+//
+// Migrate is preflighted, not transactional, across hosts (task j81): parsing
+// and host-name validation (loadLegacyHostsGrouped) and the already-migrated
+// refusal (refuseIfAlreadyMigrated) both run for every host before any host
+// is written, and unknown-action rows are quarantined rather than failing
+// (task 781) — so by the time the per-host loop below starts, the only way a
+// given host can still fail is a genuine I/O error inside Store.ReplaceHost
+// (temp-file create/write/fsync/rename). Making the per-host writes
+// themselves one atomic multi-host transaction would mean re-implementing
+// Store's temp+rename machinery in this package, which is out of scope here
+// (internal/worktime/legacy stays a caller of internal/worktime's exported
+// Store API, not a re-implementer of it). Instead, on such a failure Migrate
+// keeps going through the remaining hosts — each host's file is independent,
+// so one host's I/O error shouldn't hide whether the others succeeded — and
+// reports every host's outcome: MigrateResult.Hosts lists what landed,
+// MigrateResult.Failed lists what didn't and why, and the returned error (if
+// any) summarizes both. A retry with --force is then safe to run over ALL
+// hosts again, not just the failed ones: task 481's watermark-based
+// numbering means re-migrating an already-succeeded host just rewrites it
+// with fresh, non-colliding ids instead of erroring or duplicating data.
 func Migrate(ctx context.Context, dbDir, storeDir string, opts MigrateOptions) (MigrateResult, error) {
 	var result MigrateResult
 
-	if err := ctx.Err(); err != nil {
+	hosts, byHost, store, err := prepareMigrate(ctx, dbDir, storeDir, opts)
+	if err != nil {
 		return result, err
+	}
+	// Context cancellation aborts the whole run immediately (a caller-level
+	// stop request, unlike a single host's I/O failure below); result then
+	// reflects only whatever landed before the cancellation was noticed, and
+	// no report is written for an aborted run.
+	if err := runMigrateHosts(ctx, store, hosts, byHost, &result); err != nil {
+		return result, err
+	}
+
+	// Write the report unconditionally, including on partial failure, so the
+	// CLI's stdout output (MigrateOptions.Report) always shows exactly which
+	// hosts succeeded and which failed — a bare returned error alone would
+	// force the operator to parse an error string to find out.
+	if err := writeMigrateReport(opts.Report, result); err != nil {
+		return result, err
+	}
+	if len(result.Failed) > 0 {
+		return result, partialMigrateError(result)
+	}
+	return result, nil
+}
+
+// prepareMigrate is Migrate's preflight stage (task j81): it validates
+// dbDir/storeDir, loads and groups every legacy host section, opens the
+// JSONL store, and — unless Force is set — refuses to proceed at all if any
+// host is already migrated. Everything here runs across all hosts before a
+// single one is written, so any error return here means zero hosts were
+// touched; only a genuine per-host I/O error in runMigrateHosts's loop can
+// happen after this point.
+func prepareMigrate(ctx context.Context, dbDir, storeDir string, opts MigrateOptions) ([]string, map[string][]LegacyEntry, *worktime.Store, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, err
 	}
 	dbDir = strings.TrimSpace(dbDir)
 	storeDir = strings.TrimSpace(storeDir)
 	if dbDir == "" {
-		return result, errors.New("db directory must not be empty")
+		return nil, nil, nil, errors.New("db directory must not be empty")
 	}
 	if storeDir == "" {
-		return result, errors.New("store directory must not be empty")
+		return nil, nil, nil, errors.New("store directory must not be empty")
 	}
 
 	byHost, err := loadLegacyHostsGrouped(ctx, dbDir)
 	if err != nil {
-		return result, err
+		return nil, nil, nil, err
 	}
 	if len(byHost) == 0 {
-		return result, fmt.Errorf("no legacy host sections found in %q", dbDir)
+		return nil, nil, nil, fmt.Errorf("no legacy host sections found in %q", dbDir)
 	}
 
 	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
-		return result, err
+		return nil, nil, nil, err
 	}
 
 	hosts := sortedHostKeys(byHost)
 	if !opts.Force {
 		if err := refuseIfAlreadyMigrated(store, hosts); err != nil {
-			return result, err
+			return nil, nil, nil, err
 		}
 	}
+	return hosts, byHost, store, nil
+}
 
+// runMigrateHosts attempts every host in hosts in turn, folding each
+// outcome into result: a success appends to result.Hosts/Entries/Findings, a
+// failure appends to result.Failed and moves on to the next host rather than
+// aborting the run (see Migrate's doc comment for why that's safe: by this
+// point every preflightable failure has already been rejected or
+// quarantined, so a per-host failure here is a genuine I/O error, and the
+// remaining hosts' files are independent of it). The one thing that does
+// abort immediately is context cancellation, returned as an error so Migrate
+// can skip writing a report for a run that never finished.
+func runMigrateHosts(ctx context.Context, store *worktime.Store, hosts []string, byHost map[string][]LegacyEntry, result *MigrateResult) error {
 	for _, host := range hosts {
 		if err := ctx.Err(); err != nil {
-			return result, err
+			return err
 		}
 		entries, findings, err := migrateOneHost(ctx, store, host, byHost[host])
 		if err != nil {
-			return result, err
+			result.Failed = append(result.Failed, MigrateHostFailure{Host: host, Err: err})
+			continue
 		}
 		result.Hosts = append(result.Hosts, host)
 		result.Entries += len(entries)
 		result.Findings = append(result.Findings, findings...)
 	}
+	return nil
+}
 
-	if err := writeMigrateReport(opts.Report, result); err != nil {
-		return result, err
+// partialMigrateError summarizes a partial-failure Migrate run: how many
+// hosts failed out of how many total, which hosts already succeeded, and how
+// to retry. errors.Join keeps each host's underlying error individually
+// reachable via errors.Is/As on the returned error, while still satisfying
+// Migrate's single-error return signature.
+func partialMigrateError(result MigrateResult) error {
+	errs := make([]error, len(result.Failed))
+	for i, f := range result.Failed {
+		errs[i] = f
 	}
-	return result, nil
+	succeeded := "none"
+	if len(result.Hosts) > 0 {
+		succeeded = strings.Join(result.Hosts, ", ")
+	}
+	return fmt.Errorf(
+		"migrate: %d of %d host(s) failed (succeeded: %s); retry with --force to safely re-attempt all hosts"+
+			" -- already-succeeded hosts are rewritten with fresh, non-colliding ids, not duplicated (task 481): %w",
+		len(result.Failed), len(result.Failed)+len(result.Hosts), succeeded, errors.Join(errs...))
 }
 
 // migrateOneHost converts one host's legacy entries and writes them to store,
@@ -414,9 +527,38 @@ func writeMigrateReport(w io.Writer, result MigrateResult) error {
 		len(result.Hosts), result.Entries, len(result.Findings)); err != nil {
 		return fmt.Errorf("write migrate report: %w", err)
 	}
+	if err := writeMigrateHostLists(w, result); err != nil {
+		return err
+	}
 	for _, f := range result.Findings {
 		if _, err := fmt.Fprintln(w, f.String()); err != nil {
 			return fmt.Errorf("write migrate finding: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeMigrateHostLists prints the succeeded/failed host breakdown so a
+// partial-failure run is legible straight from the CLI's stdout report
+// without the reader having to parse the returned error string (task j81).
+// The succeeded line is only printed when non-empty so a routine full
+// success keeps its familiar single-summary-line report unchanged.
+func writeMigrateHostLists(w io.Writer, result MigrateResult) error {
+	if len(result.Hosts) > 0 {
+		if _, err := fmt.Fprintf(w, "  succeeded: %s\n", strings.Join(result.Hosts, ", ")); err != nil {
+			return fmt.Errorf("write migrate report: %w", err)
+		}
+	}
+	if len(result.Failed) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "  failed: %d host(s) -- retry with --force to safely re-attempt all hosts\n",
+		len(result.Failed)); err != nil {
+		return fmt.Errorf("write migrate report: %w", err)
+	}
+	for _, f := range result.Failed {
+		if _, err := fmt.Fprintf(w, "    - %s: %v\n", f.Host, f.Err); err != nil {
+			return fmt.Errorf("write migrate report: %w", err)
 		}
 	}
 	return nil

@@ -415,6 +415,119 @@ func TestMigrate_QuarantinesUnknownAction(t *testing.T) {
 	}
 }
 
+// TestMigrate_PartialHostFailureReportsAndRetrySucceeds is the regression
+// test for task j81: Migrate's per-host loop is not one atomic multi-host
+// transaction (see Migrate's doc comment for why -- every preflightable
+// failure, parsing/host-name validation and unknown-action rows, is already
+// rejected or quarantined before any host is written, so the remaining
+// failure surface is a genuine per-host I/O error, not "malformed data" in
+// the task-781 sense). This simulates exactly that: three hosts' legacy
+// data all parse and validate fine, but hostb's db.hostb.jsonl.tmp path is
+// pre-occupied by a directory, so Store.ReplaceHost's temp-file create
+// fails for hostb specifically while hosta and hostc succeed around it.
+//
+// Asserts: (1) the returned MigrateResult clearly separates Hosts
+// (succeeded) from Failed (failed, naming the host and reason); (2) the
+// report written to Report shows the same breakdown, so a CLI user doesn't
+// need to parse the error string; (3) a retry with --force completes
+// cleanly for all three hosts, including the two that already succeeded,
+// without erroring on them (task 481's watermark fix keeps that re-touch
+// safe).
+func TestMigrate_PartialHostFailureReportsAndRetrySucceeds(t *testing.T) {
+	ctx := context.Background()
+	dbDir := t.TempDir()
+	storeDir := t.TempDir()
+
+	for _, host := range []string{"hosta", "hostb", "hostc"} {
+		raw := `{
+  "entries": {
+    "` + host + `": [
+      {"action":"login","what":"work","epoch":100,"source":"` + host + `","human":"h"},
+      {"action":"logout","what":"work","epoch":200,"source":"` + host + `","human":"h"}
+    ]
+  }
+}`
+		if err := os.WriteFile(filepath.Join(dbDir, "db."+host+".json"), []byte(raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Block hostb's rewrite: Store's rewriteJSONLFile creates
+	// db.<host>.jsonl.tmp before renaming it into place; pre-creating that
+	// exact path as a directory makes the O_CREATE|O_TRUNC open fail with
+	// "is a directory" for hostb only, leaving hosta/hostc untouched.
+	blockedTmp := filepath.Join(storeDir, "db.hostb.jsonl.tmp")
+	if err := os.MkdirAll(blockedTmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var report bytes.Buffer
+	result, err := Migrate(ctx, dbDir, storeDir, MigrateOptions{Report: &report})
+	if err == nil {
+		t.Fatal("expected a partial-failure error, got nil")
+	}
+	if strings.Join(result.Hosts, ",") != "hosta,hostc" {
+		t.Fatalf("Hosts (succeeded) = %v, want [hosta hostc]", result.Hosts)
+	}
+	if len(result.Failed) != 1 || result.Failed[0].Host != "hostb" {
+		t.Fatalf("Failed = %+v, want exactly hostb", result.Failed)
+	}
+	if !strings.Contains(err.Error(), "hostb") || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("error %q must name the failed host and mention --force", err.Error())
+	}
+
+	// The report written before the error is returned must show the same
+	// succeeded/failed breakdown.
+	out := report.String()
+	if !strings.Contains(out, "succeeded: hosta, hostc") {
+		t.Fatalf("report missing succeeded breakdown:\n%s", out)
+	}
+	if !strings.Contains(out, "failed: 1 host") || !strings.Contains(out, "hostb") {
+		t.Fatalf("report missing failed breakdown:\n%s", out)
+	}
+
+	// hosta and hostc already landed in the store; hostb did not.
+	store, err := worktime.Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("Open store: %v", err)
+	}
+	if len(store.Entries("hosta")) != 2 || len(store.Entries("hostc")) != 2 {
+		t.Fatalf("hosta/hostc entries: hosta=%d hostc=%d, want 2 each",
+			len(store.Entries("hosta")), len(store.Entries("hostc")))
+	}
+	if len(store.Entries("hostb")) != 0 {
+		t.Fatalf("hostb entries = %d, want 0 (its write must have failed cleanly)", len(store.Entries("hostb")))
+	}
+
+	// Unblock hostb (simulating the underlying I/O problem being fixed) and
+	// retry with --force: this re-attempts ALL three hosts, not just hostb,
+	// and must succeed on hosta/hostc too without erroring on their
+	// already-migrated data.
+	if err := os.RemoveAll(blockedTmp); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Migrate(ctx, dbDir, storeDir, MigrateOptions{Force: true})
+	if err != nil {
+		t.Fatalf("retry with --force: %v", err)
+	}
+	if len(result.Failed) != 0 {
+		t.Fatalf("Failed after successful retry = %+v, want none", result.Failed)
+	}
+	if strings.Join(result.Hosts, ",") != "hosta,hostb,hostc" {
+		t.Fatalf("Hosts after retry = %v, want all three", result.Hosts)
+	}
+
+	store, err = worktime.Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("re-Open store: %v", err)
+	}
+	for _, host := range []string{"hosta", "hostb", "hostc"} {
+		if got := len(store.Entries(host)); got != 2 {
+			t.Fatalf("%s entries after retry = %d, want 2", host, got)
+		}
+	}
+}
+
 func TestMigrateFindingString(t *testing.T) {
 	f := MigrateFinding{
 		Kind:   FindingUnpairedLogin,
