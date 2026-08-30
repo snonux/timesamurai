@@ -578,3 +578,82 @@ func TestModify_InvalidAddress(t *testing.T) {
 		t.Fatal("Modify with malformed address: expected error")
 	}
 }
+
+func TestOpenSessions_EmptyStoreReportsNone(t *testing.T) {
+	store, _ := openStore(t)
+	cfg := testAccountingConfig()
+
+	got := OpenSessions(store, cfg)
+	if len(got) != 0 {
+		t.Fatalf("OpenSessions on empty store: got %+v, want none", got)
+	}
+}
+
+func TestOpenSessions_ReflectsLoginAcrossHosts(t *testing.T) {
+	// The login/logout state machine is cross-host: a "work" login on earth
+	// must show up as open (on earth) even when queried after activity on a
+	// different host, and status.go's caller relies on exactly this.
+	store, ctx := openStore(t)
+	cfg := testAccountingConfig()
+
+	if _, err := Start(ctx, store, cfg, "earth", []string{"work"}, time.Unix(100, 0), ""); err != nil {
+		t.Fatalf("Start work: %v", err)
+	}
+
+	got := OpenSessions(store, cfg)
+	if len(got) != 1 || got[0].Category != WorkTag || got[0].Host != "earth" || !got[0].Since.Equal(time.Unix(100, 0)) {
+		t.Fatalf("OpenSessions after login: got %+v", got)
+	}
+}
+
+func TestOpenSessions_MultipleCategoriesSortedByCategory(t *testing.T) {
+	store, ctx := openStore(t)
+	cfg := testAccountingConfig()
+
+	if _, err := Start(ctx, store, cfg, "earth", []string{"lunch"}, time.Unix(100, 0), ""); err != nil {
+		t.Fatalf("Start lunch: %v", err)
+	}
+	if _, err := Start(ctx, store, cfg, "earth", []string{"work"}, time.Unix(110, 0), ""); err != nil {
+		t.Fatalf("Start work: %v", err)
+	}
+
+	got := OpenSessions(store, cfg)
+	if len(got) != 2 || got[0].Category != "lunch" || got[1].Category != WorkTag {
+		t.Fatalf("OpenSessions with two open categories: got %+v, want [lunch, work] sorted by category", got)
+	}
+}
+
+func TestOpenSessions_LogoutClosesCategory(t *testing.T) {
+	store, ctx := openStore(t)
+	cfg := testAccountingConfig()
+
+	if _, err := Start(ctx, store, cfg, "earth", []string{"work"}, time.Unix(100, 0), ""); err != nil {
+		t.Fatalf("Start work: %v", err)
+	}
+	if _, err := Stop(ctx, store, cfg, "earth", []string{"work"}, time.Unix(200, 0), ""); err != nil {
+		t.Fatalf("Stop work: %v", err)
+	}
+
+	got := OpenSessions(store, cfg)
+	if len(got) != 0 {
+		t.Fatalf("OpenSessions after logout: got %+v, want none", got)
+	}
+}
+
+func TestOpenSessions_SkipsEntriesWithMalformedTags(t *testing.T) {
+	// AccountingTag rejects a tag set naming more than one accounting
+	// category (e.g. two plusfor tags at once); OpenSessions must skip such
+	// entries rather than aborting the whole replay, same as
+	// openSessionHost did before this was generalized.
+	store, ctx := openStore(t)
+	cfg := testAccountingConfig()
+
+	if err := store.Append(ctx, Entry{ID: 1, Action: ActionLogin, Epoch: 100, Host: "earth", Tags: []string{"off", "bank"}}); err != nil {
+		t.Fatalf("Append malformed entry: %v", err)
+	}
+
+	got := OpenSessions(store, cfg)
+	if len(got) != 0 {
+		t.Fatalf("OpenSessions with only a malformed-tag entry: got %+v, want none", got)
+	}
+}

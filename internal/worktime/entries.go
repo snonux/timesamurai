@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -359,26 +360,73 @@ func sessionKey(cfg config.AccountingConfig, tags []string) (string, error) {
 	return tag, nil
 }
 
-// openSessionHost reports whether category has an unmatched login anywhere
-// in the store, and on which host, by replaying every host's entries in
-// global epoch order. Entries whose tags don't resolve to a session key
-// (malformed historical data) are skipped rather than aborting the whole
-// check, since they simply don't participate in this category's state.
-func openSessionHost(store entryReader, cfg config.AccountingConfig, category string) (string, bool, error) {
-	openHost := ""
+// OpenSession describes one still-open login: the accounting category it
+// belongs to, the host holding it, and the time the login was recorded. It
+// is the exported view of the login/logout state machine below, for callers
+// (e.g. the CLI's `status` command) that need to display every open
+// category at once rather than probe a single one.
+type OpenSession struct {
+	Category string
+	Host     string
+	Since    time.Time
+}
+
+// OpenSessions reports every accounting category with an unmatched login,
+// by replaying every entry in store in global epoch order
+// (allEntriesSorted) and tracking the most recent login/logout per
+// category. This is the single implementation of the login/logout state
+// machine: openSessionHost below delegates to it for the single-category
+// check Start/Stop need, so a mutation guard and a read-only status view
+// can never drift apart the way two separate replay loops could. Entries
+// whose tags don't resolve to a session key (malformed historical data) are
+// skipped rather than aborting the whole replay. The result is sorted by
+// category so repeated calls (and `status` output) are stable rather than
+// following Go's randomized map iteration order.
+func OpenSessions(store entryReader, cfg config.AccountingConfig) []OpenSession {
+	open := make(map[string]OpenSession)
 	for _, e := range allEntriesSorted(store) {
-		key, err := sessionKey(cfg, e.Tags)
-		if err != nil || key != category {
+		category, err := sessionKey(cfg, e.Tags)
+		if err != nil {
 			continue
 		}
-		switch strings.ToLower(strings.TrimSpace(e.Action)) {
-		case ActionLogin:
-			openHost = e.Host
-		case ActionLogout:
-			openHost = ""
+		applySessionEvent(open, category, e)
+	}
+	return sortedSessions(open)
+}
+
+// applySessionEvent updates open in place for one entry: a login opens (or
+// re-opens, e.g. on a superseded prior login) category, a logout closes it,
+// and any other action leaves session state untouched.
+func applySessionEvent(open map[string]OpenSession, category string, e Entry) {
+	switch strings.ToLower(strings.TrimSpace(e.Action)) {
+	case ActionLogin:
+		open[category] = OpenSession{Category: category, Host: e.Host, Since: time.Unix(e.Epoch, 0)}
+	case ActionLogout:
+		delete(open, category)
+	}
+}
+
+// sortedSessions returns open's values sorted by category.
+func sortedSessions(open map[string]OpenSession) []OpenSession {
+	result := make([]OpenSession, 0, len(open))
+	for _, s := range open {
+		result = append(result, s)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Category < result[j].Category })
+	return result
+}
+
+// openSessionHost reports whether category has an unmatched login anywhere
+// in the store, and on which host, by delegating to OpenSessions and
+// filtering for category. Start uses this to refuse a second login for a
+// category that is already open; Stop uses it to find the host to close.
+func openSessionHost(store entryReader, cfg config.AccountingConfig, category string) (string, bool, error) {
+	for _, s := range OpenSessions(store, cfg) {
+		if s.Category == category {
+			return s.Host, true, nil
 		}
 	}
-	return openHost, openHost != "", nil
+	return "", false, nil
 }
 
 // allEntriesSorted merges every host's entries into one globally
