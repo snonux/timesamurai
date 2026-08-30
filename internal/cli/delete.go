@@ -30,6 +30,9 @@ func newDeleteCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print what would be deleted without deleting anything")
+	// 571: same address completer modify.go uses -- delete's positional is
+	// variadic, but each position still names one <host:id> address.
+	cmd.ValidArgsFunction = completeHostIDAddress
 	return cmd
 }
 

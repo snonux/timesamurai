@@ -40,6 +40,11 @@ func newListCmd() *cobra.Command {
 		},
 	}
 	addFilterFlags(cmd, &f, true)
+	// 571: the optional [range] positional completes against
+	// internal/timefmt's fixed range keywords (complete.go); --host/--tag
+	// completion is wired once, for both list and search, inside
+	// addFilterFlags below.
+	cmd.ValidArgsFunction = completeRanges
 	return cmd
 }
 
@@ -52,6 +57,11 @@ func addFilterFlags(cmd *cobra.Command, f *filterFlagValues, includeDescr bool) 
 	cmd.Flags().StringVar(&f.host, "host", "", "match entries from exactly this host")
 	cmd.Flags().StringVar(&f.tag, "tag", "", "match entries carrying this tag")
 	cmd.Flags().StringVar(&f.action, "action", "", "match entries with this action (login/logout/add)")
+	// 571: --host/--tag both enumerate against the store's actual values
+	// (complete.go) rather than offering nothing or falling back to file
+	// completion, which would never be the right suggestion for either flag.
+	registerFlagCompletion(cmd, "host", completeHosts)
+	registerFlagCompletion(cmd, "tag", completeTags)
 	if includeDescr {
 		cmd.Flags().StringVarP(&f.descr, "descr", "d", "", "match entries whose description contains this text (case-insensitive)")
 	}

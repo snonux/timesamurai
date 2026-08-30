@@ -25,6 +25,8 @@ func newReportCmd() *cobra.Command {
 			return runReport(cmd, args)
 		},
 	}
+	// 571: same [range] completer list.go wires up.
+	cmd.ValidArgsFunction = completeRanges
 	return cmd
 }
 

@@ -90,7 +90,7 @@ type editOp struct {
 
 // newEditCmd builds `work edit [range]`.
 func newEditCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "edit [range]",
 		Short: "Edit entries in $EDITOR as a text block",
 		Args:  cobra.MaximumNArgs(1),
@@ -98,6 +98,9 @@ func newEditCmd() *cobra.Command {
 			return runEdit(cmd, positionalRange(args))
 		},
 	}
+	// 571: same [range] completer list.go/report.go wire up.
+	cmd.ValidArgsFunction = completeRanges
+	return cmd
 }
 
 // runEdit loads the rows in range, opens them in $EDITOR, diffs the result

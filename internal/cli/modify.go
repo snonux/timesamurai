@@ -33,6 +33,10 @@ func newModifyCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&descr, "descr", "d", "", "new free-text description")
 	cmd.Flags().StringVar(&action, "action", "", "new action (login/logout/add)")
 	cmd.Flags().StringSliceVar(&tags, "tags", nil, "new comma-separated tag list, replacing every existing tag")
+	// 571: complete the <host:id> positional against known entry addresses,
+	// each shown with its date and description (complete.go) so a caller
+	// can tell entries apart without a separate `work list` first.
+	cmd.ValidArgsFunction = completeHostIDAddress
 	return cmd
 }
 
