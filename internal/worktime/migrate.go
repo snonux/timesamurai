@@ -73,6 +73,9 @@ type MigrateResult struct {
 // Host sections drive output names: db.archive.json is split by section key into
 // db.mc-lon-mb8477.jsonl and db.galaxytabs6.jsonl (never db.archive.jsonl).
 // A second run without Force returns ErrAlreadyMigrated and changes nothing.
+// A Force run replaces a host's file outright, but ids are still numbered
+// from that host's current watermark (not always from 1), so a prior delete
+// or undo-elevated watermark never collides with the store's id-reuse guard.
 //
 // Real-data cases (see ~/git/worktime; covered synthetically in testdata/migrate):
 //   - one unpaired/superseded earth login at epoch 1781618168 (4377 logins vs 4376 logouts)
@@ -117,22 +120,47 @@ func Migrate(ctx context.Context, dbDir, storeDir string, opts MigrateOptions) (
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		legacyEntries := byHost[host]
-		entries := convertLegacyHost(host, legacyEntries)
-		findings := collectMigrateFindings(host, legacyEntries, entries)
-		result.Findings = append(result.Findings, findings...)
-
-		if err := store.ReplaceHost(ctx, host, entries); err != nil {
-			return result, fmt.Errorf("write host %q: %w", host, err)
+		entries, findings, err := migrateOneHost(ctx, store, host, byHost[host])
+		if err != nil {
+			return result, err
 		}
 		result.Hosts = append(result.Hosts, host)
 		result.Entries += len(entries)
+		result.Findings = append(result.Findings, findings...)
 	}
 
 	if err := writeMigrateReport(opts.Report, result); err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+// migrateOneHost converts one host's legacy entries and writes them to store,
+// replacing whatever that host previously held.
+//
+// Entries are numbered starting at the host's current id watermark (via
+// NextID) rather than always at 1. A fresh host has no watermark yet, so
+// NextID returns 1 and behavior is unchanged from a first-time migration. On
+// a Force re-migrate of a host that has since had entries deleted (or whose
+// watermark was raised by an undo restore), starting at 1 again would
+// collide with replaceHostLocked's reuse guard, which rejects any id below
+// the watermark that is not currently present (see store.go). Starting at
+// the watermark instead keeps ids globally non-reused across the host's
+// lifetime, matching the store's "ids never reused" invariant, without
+// needing the allowRestore bypass that undo restore uses for a different
+// purpose (reinstating one specific historical id/entry pair).
+func migrateOneHost(ctx context.Context, store *Store, host string, legacyEntries []LegacyEntry) ([]Entry, []MigrateFinding, error) {
+	startID, err := store.NextID(host)
+	if err != nil {
+		return nil, nil, fmt.Errorf("next id for host %q: %w", host, err)
+	}
+	entries := convertLegacyHost(host, legacyEntries, startID)
+	findings := collectMigrateFindings(host, legacyEntries, entries)
+
+	if err := store.ReplaceHost(ctx, host, entries); err != nil {
+		return nil, nil, fmt.Errorf("write host %q: %w", host, err)
+	}
+	return entries, findings, nil
 }
 
 func loadLegacyHostsGrouped(ctx context.Context, dbDir string) (map[string][]LegacyEntry, error) {
@@ -193,10 +221,16 @@ func refuseIfAlreadyMigrated(storeDir string, hosts []string) error {
 	return nil
 }
 
-func convertLegacyHost(host string, legacyEntries []LegacyEntry) []Entry {
+// convertLegacyHost assigns each legacy entry a fresh, monotonically
+// increasing id starting at startID (the host's current watermark from the
+// store, or 1 for a host that has never been written). Numbering from the
+// watermark instead of always from 1 keeps a Force re-migrate compatible
+// with replaceHostLocked's id-reuse guard even after prior deletes have
+// left gaps below the watermark.
+func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) []Entry {
 	out := make([]Entry, 0, len(legacyEntries))
 	for i, leg := range legacyEntries {
-		out = append(out, legacyToEntry(int64(i+1), host, leg))
+		out = append(out, legacyToEntry(startID+int64(i), host, leg))
 	}
 	return out
 }

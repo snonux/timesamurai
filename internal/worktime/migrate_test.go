@@ -249,6 +249,94 @@ func TestMigrate_PreservesSameEpochOrderAndIDs(t *testing.T) {
 	}
 }
 
+// TestMigrate_ForceAfterDeleteReusesWatermarkNotOne is the regression test for
+// task 481: a Force re-migrate used to renumber entries 1..len(entries),
+// which collided with replaceHostLocked's id-reuse guard whenever the host's
+// watermark had moved past 1 (e.g. because an earlier entry was deleted).
+// This exercises exactly that: three entries land on disk with ids 1..3, id
+// 1 is deleted (leaving a gap below the watermark of 4), and a Force migrate
+// of a one-entry legacy host must still succeed and produce a consistent,
+// non-colliding store.
+func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
+	ctx := context.Background()
+	storeDir := t.TempDir()
+
+	store, err := Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("Open store: %v", err)
+	}
+	for i, action := range []string{"login", "logout", "add"} {
+		entry := Entry{
+			ID:     int64(i + 1),
+			Action: action,
+			Epoch:  int64(1000 + i),
+			Host:   "earth",
+			Tags:   []string{"work"},
+		}
+		if action == "add" {
+			entry.Value = 60
+		}
+		if err := store.Append(ctx, entry); err != nil {
+			t.Fatalf("Append entry %d: %v", i+1, err)
+		}
+	}
+	if _, err := Delete(ctx, store, "earth:1", "earth"); err != nil {
+		t.Fatalf("Delete earth:1: %v", err)
+	}
+	// Watermark stays at 4 (ids never reused) even though id 1 is now gone.
+	if next, err := store.NextID("earth"); err != nil || next != 4 {
+		t.Fatalf("NextID(earth) = %d, %v; want 4, nil", next, err)
+	}
+
+	dbDir := t.TempDir()
+	raw := `{
+  "entries": {
+    "earth": [
+      {"action":"login","what":"selfdevelopment","epoch":2000,"source":"earth","human":"e"}
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dbDir, "db.earth.json"), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Migrate(ctx, dbDir, storeDir, MigrateOptions{Force: true})
+	if err != nil {
+		t.Fatalf("force Migrate: %v", err)
+	}
+	if result.Entries != 1 {
+		t.Fatalf("Entries = %d, want 1", result.Entries)
+	}
+
+	reopened, err := Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("re-Open store: %v", err)
+	}
+	earth := reopened.Entries("earth")
+	if len(earth) != 1 {
+		t.Fatalf("earth entries after force migrate = %d, want 1: %+v", len(earth), earth)
+	}
+	// The migrated entry must land at or above the pre-migrate watermark (4),
+	// never at the deleted id 1 — that would silently resurrect an id whose
+	// undo history belongs to a different, now-discarded entry.
+	if earth[0].ID < 4 {
+		t.Fatalf("migrated entry id = %d, want >= 4 (pre-migrate watermark)", earth[0].ID)
+	}
+	if next, err := reopened.NextID("earth"); err != nil || next <= earth[0].ID {
+		t.Fatalf("NextID(earth) after force migrate = %d, %v; want > %d", next, err, earth[0].ID)
+	}
+
+	// A follow-up Append must not error out on an id collision, confirming
+	// the store's id bookkeeping is consistent after the force migrate.
+	next, err := reopened.NextID("earth")
+	if err != nil {
+		t.Fatalf("NextID: %v", err)
+	}
+	if err := reopened.Append(ctx, Entry{ID: next, Action: "logout", Epoch: 3000, Host: "earth", Tags: []string{"work"}}); err != nil {
+		t.Fatalf("Append after force migrate: %v", err)
+	}
+}
+
 func TestMigrateFindingString(t *testing.T) {
 	f := MigrateFinding{
 		Kind:   FindingUnpairedLogin,
