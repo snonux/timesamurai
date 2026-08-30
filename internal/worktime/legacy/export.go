@@ -170,9 +170,9 @@ func buildFreshLegacyEntries(host string, entries []worktime.Entry) []LegacyEntr
 //
 // worktime.rb's schema carries exactly one "what" tag per entry; JSONL
 // entries may carry several — fixing that one-tag limit was one of the
-// reasons for the rewrite (see docs/worktime-rewrite-plan.md). Export
-// collapses back down to the first tag, mirroring migrate.go's reverse
-// conversion (legacyToEntry puts What into Tags[0]), so a migrate-then-
+// reasons for the rewrite. Export collapses back down to the first tag,
+// mirroring migrate.go's reverse conversion (legacyToEntry puts What into
+// Tags[0]), so a migrate-then-
 // export round trip is a no-op for the untouched, single-tag history that
 // makes up the real dataset.
 func entryToLegacy(host string, entry worktime.Entry) LegacyEntry {

@@ -21,20 +21,19 @@ import (
 // carry into whole seconds, the unit worktime.Add expects via time.Duration.
 const importSecondsPerHour = 3600
 
-// Package boundary note (z61): this file, not internal/worktime, is the new
-// home for the pre-rewrite report.txt line parser (see
+// Package boundary note: this file, not internal/worktime, is the home for
+// the pre-rewrite report.txt line parser (see
 // `git show pre-rewrite:internal/worktime/import.go`). That old file's
 // ParseImportLine/ParseImportDate are pure text parsing with no dependency
-// on the worktime package's model beyond time.Time, and the rewritten
-// package layout in docs/worktime-rewrite-plan.md's file table (migrate.go,
-// export.go, legacy.go) never lists an import.go alongside them -- only
-// z61's own CLI-table entry ever mentions "work import <file>". Since the
-// only thing left to port is the parsing and the one call that used to
-// write straight to a dbDir now goes through worktime.Add against an
-// opened *Store, keeping the parser here avoids re-widening the worktime
-// package's API for a single CLI verb, while still being a five-minute
-// move back into worktime/import.go later if another caller ever needs the
-// parser outside the CLI.
+// on the worktime package's model beyond time.Time, and the worktime
+// package's file layout (migrate.go, export.go, legacy.go) has no
+// import.go alongside them -- only "work import <file>" ever needs this
+// parser. Since the only thing left to port is the parsing and the one
+// call that used to write straight to a dbDir now goes through
+// worktime.Add against an opened *Store, keeping the parser here avoids
+// re-widening the worktime package's API for a single CLI verb, while
+// still being a five-minute move back into worktime/import.go later if
+// another caller ever needs the parser outside the CLI.
 
 // importLine is one parsed report.txt day: hours by category. Mirrors the
 // pre-rewrite tool's ImportLine field-for-field.

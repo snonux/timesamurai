@@ -160,10 +160,9 @@ func legacyLogError() error {
 
 // legacyPomodoroError explains why --pomodoro is rejected rather than
 // silently ignored: worktime.rb's pomodoro timer drives macOS `osascript`
-// dialogs, which have no equivalent on this Linux/CLI port, and no other
-// part of docs/worktime-rewrite-plan.md's CLI table lists a timer verb to
-// reuse instead. A loud, explicit rejection is safer than a flag that
-// parses fine and then does nothing a caller would notice.
+// dialogs, which have no equivalent on this Linux/CLI port, and this CLI
+// has no timer verb to reuse instead. A loud, explicit rejection is safer
+// than a flag that parses fine and then does nothing a caller would notice.
 func legacyPomodoroError() error {
 	return fmt.Errorf("--pomodoro is not supported by this port: worktime.rb's pomodoro timer used macOS osascript dialogs, which have no CLI equivalent here")
 }

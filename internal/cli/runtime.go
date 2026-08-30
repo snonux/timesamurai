@@ -1,8 +1,7 @@
 // Package cli builds the Cobra command tree for timesamurai: the "work"
-// group (this file's runtime plumbing plus one file per verb family) that
-// future sibling tasks (report/list/search, modify/delete/undo/edit,
-// migrate/export/import, the worktime.rb flag shim, shell completions) grow
-// into the full tool described in docs/worktime-rewrite-plan.md.
+// group (this file's runtime plumbing plus one file per verb family:
+// report/list/search, modify/delete/undo/edit, migrate/export/import, the
+// worktime.rb flag shim, shell completions).
 package cli
 
 import (
