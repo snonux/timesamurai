@@ -2,6 +2,7 @@ package worktime
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"strings"
@@ -56,12 +57,22 @@ type WeekReport struct {
 	Buffer int64
 }
 
+// openLogin is one still-open login: its start epoch and the host that
+// logged it in. The host is only needed for the superseded-login warning
+// (see applyAction's actionLogin case) — report() itself never keys
+// anything on it, since Ruby's login map is category-only too.
+type openLogin struct {
+	Epoch int64
+	Host  string
+}
+
 // reportState is the mutable state report() threads through sorted_entries:
 // the day/week currently being accumulated, open logins, and the two
 // running totals (balance, buffer) that persist across week boundaries.
 type reportState struct {
 	cfg   config.AccountingConfig
-	login map[string]int64 // category -> epoch of its still-open login
+	warn  io.Writer            // destination for the superseded-login warning
+	login map[string]openLogin // category -> its still-open login
 
 	totalBuffer int64 // running sum of bufferfor 'add' entries, never reset
 	balance     int64 // running cross-week balance, never reset
@@ -86,10 +97,17 @@ type weekAccumulator struct {
 
 // newReportState returns a reportState ready to replay entries from the
 // very first one (no open logins, empty running day/week accumulators).
-func newReportState(cfg config.AccountingConfig) *reportState {
+// warn receives the superseded-login diagnostic (see applyAction); a nil
+// warn is replaced with io.Discard so callers that don't care about the
+// warning (e.g. most tests) don't have to pass one.
+func newReportState(cfg config.AccountingConfig, warn io.Writer) *reportState {
+	if warn == nil {
+		warn = io.Discard
+	}
 	return &reportState{
 		cfg:   cfg,
-		login: map[string]int64{},
+		warn:  warn,
+		login: map[string]openLogin{},
 		day:   dayAccumulator{values: map[string]int64{}},
 		week:  weekAccumulator{values: map[string]int64{}},
 	}
@@ -103,7 +121,14 @@ func newReportState(cfg config.AccountingConfig) *reportState {
 // commutative 'add' or a login+add pair whose result doesn't depend on
 // order (verified against the live db.*.json files), so the merge order of
 // distinct hosts feeding in here does not affect output.
-func BuildReport(entries []Entry, cfg config.AccountingConfig) ([]WeekReport, error) {
+//
+// warn receives one line per superseded-login discard (see applyAction's
+// actionLogin case for why that discard happens and why it must not be an
+// error) — pass os.Stderr to surface it, or nil/io.Discard to ignore it.
+// This is purely a diagnostic side channel: it never changes the returned
+// []WeekReport, so passing a different warn writer cannot change what gets
+// reported.
+func BuildReport(entries []Entry, cfg config.AccountingConfig, warn io.Writer) ([]WeekReport, error) {
 	if len(entries) == 0 {
 		// Ruby would crash here (Time.at(nil) on the placeholder day/week
 		// that report() always flushes once) — an empty store is not a
@@ -112,7 +137,7 @@ func BuildReport(entries []Entry, cfg config.AccountingConfig) ([]WeekReport, er
 	}
 
 	sorted := sortEntriesForReport(entries)
-	state := newReportState(cfg)
+	state := newReportState(cfg, warn)
 	for _, entry := range sorted {
 		if err := state.process(entry); err != nil {
 			return nil, err
@@ -202,9 +227,22 @@ func (s *reportState) process(entry Entry) error {
 // — a literal string key insert() never sets (real keys are the category
 // name) — so the guard is always false. A second login for an already-open
 // category silently overwrites the first: the earlier login is discarded
-// with no logout ever recorded for it. Real data hits this exactly once
-// (host earth, category "work", login at epoch 1781618168 superseded by
-// 1783319163) and the golden report reflects the discard, not an error.
+// with no logout ever recorded for it. Real data hits this exactly once:
+// host earth logs in for "work" at epoch 1781618168 (2026-06-16 16:56) and
+// never logs out; host MBDVXJ4XKH9C's own "work" login at epoch 1781630083
+// (the same evening, 20:14 — a plausible desktop-to-laptop switch) arrives
+// first in the globally epoch-sorted replay (sorted_entries/BuildReport
+// merge every host's entries into one timeline) and discards it. Verified
+// by instrumenting this exact code path against the live db.*.json files:
+// it is the only discard in the whole 12,802-entry dataset. (An earlier
+// draft of this comment named earth's own later login at 1783319163 as the
+// superseder; that login's own predecessor had already been closed by a
+// logout by the time it fires, so it does not trigger a second discard —
+// the actual superseder is the cross-host login above.) The golden report
+// reflects the discard, not an error. Since report.go doesn't get to "fix"
+// Ruby's guard, the only honest improvement available is observability:
+// warnDiscardedLogin logs the discard to s.warn before it happens, naming
+// both the entry being thrown away and the one that overwrites it.
 func (s *reportState) applyAction(entry Entry, category string) error {
 	switch action := strings.ToLower(strings.TrimSpace(entry.Action)); action {
 	case actionAdd:
@@ -213,18 +251,40 @@ func (s *reportState) applyAction(entry Entry, category string) error {
 			s.totalBuffer += entry.Value
 		}
 	case actionLogin:
-		s.login[category] = entry.Epoch
+		s.warnDiscardedLogin(entry, category)
+		s.login[category] = openLogin{Epoch: entry.Epoch, Host: entry.Host}
 	case actionLogout:
-		startEpoch, open := s.login[category]
-		if !open {
+		open, ok := s.login[category]
+		if !ok {
 			return fmt.Errorf("logout without login for %q at epoch %d", category, entry.Epoch)
 		}
-		s.day.values[category] += entry.Epoch - startEpoch
+		s.day.values[category] += entry.Epoch - open.Epoch
 		delete(s.login, category)
 	default:
 		return fmt.Errorf("unknown action %q at epoch %d", entry.Action, entry.Epoch)
 	}
 	return nil
+}
+
+// warnDiscardedLogin writes one diagnostic line to s.warn when entry (a new
+// login for category) is about to silently overwrite an already-open login
+// for that same category — the discard applyAction's comment describes.
+// It is a no-op when category has no open login, i.e. the common case.
+// This never returns an error and never touches report state: it exists
+// solely so the discard, which report.go must still perform to stay
+// byte-for-byte with Ruby, is at least visible instead of silent. A write
+// failure on the warn writer (e.g. a closed pipe) is deliberately not
+// reported to the caller: losing a diagnostic line must never turn into an
+// aborted report, so the error is discarded explicitly here rather than
+// left unchecked.
+func (s *reportState) warnDiscardedLogin(entry Entry, category string) {
+	discarded, open := s.login[category]
+	if !open {
+		return
+	}
+	_, _ = fmt.Fprintf(s.warn,
+		"warning: superseded login discarded (never logged out): host=%s category=%q epoch=%d; superseded by login at epoch=%d on host=%s\n",
+		discarded.Host, category, discarded.Epoch, entry.Epoch, entry.Host)
 }
 
 // flushDay mirrors add_day_to_week followed by print_day's in-place mutation:

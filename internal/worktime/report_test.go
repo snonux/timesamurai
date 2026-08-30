@@ -1,6 +1,8 @@
 package worktime
 
 import (
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +26,10 @@ func mkEntry(id int64, action string, epoch int64, value int64, tags ...string) 
 
 func buildAndFormat(t *testing.T, cfg config.AccountingConfig, entries []Entry) ([]WeekReport, string) {
 	t.Helper()
-	weeks, err := BuildReport(entries, cfg)
+	// io.Discard: none of these tests care about the superseded-login
+	// warning (that has its own dedicated test below), so nothing should
+	// observe stderr noise from an unrelated case.
+	weeks, err := BuildReport(entries, cfg, io.Discard)
 	if err != nil {
 		t.Fatalf("BuildReport: %v", err)
 	}
@@ -225,19 +230,71 @@ func TestLoginOverwriteSilentlyDiscardsPreviousOpenLogin(t *testing.T) {
 	// Ruby's "already logged in" guard checks a dead literal key and is
 	// always false, so this must NOT error: it silently drops the first
 	// login (no duration ever attributed to it) and the eventual logout
-	// closes the SECOND login only.
+	// closes the SECOND login only. Task v61: the discard must still be
+	// observable, so it's reported to the warn writer instead of nowhere.
 	entries := []Entry{
 		mkEntry(1, actionLogin, t0, 0, WorkTag),
 		mkEntry(2, actionLogin, t1, 0, WorkTag),
 		mkEntry(3, actionLogout, t2, 0, WorkTag),
 	}
 
-	weeks, err := BuildReport(entries, cfg)
+	var warn strings.Builder
+	weeks, err := BuildReport(entries, cfg, &warn)
 	if err != nil {
 		t.Fatalf("BuildReport must not error on the double-login bug: %v", err)
 	}
 	if got, want := weeks[0].Values[WorkTag], t2-t1; got != want {
 		t.Fatalf("work = %d, want %d (only the second login's span)", got, want)
+	}
+
+	msg := warn.String()
+	for _, want := range []string{"h1", `"work"`, fmt.Sprintf("%d", t0), fmt.Sprintf("%d", t1)} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("warning %q missing %q (want host, category, discarded epoch, superseding epoch)", msg, want)
+		}
+	}
+}
+
+// TestLoginOverwriteWarnsAgainstRealCase reproduces the one discard that
+// actually occurs in the live 12,802-entry dataset (verified by running
+// this package's BuildReport against a scratch copy of the real db.*.json
+// files, task v61): host earth logs in for "work" at epoch 1781618168
+// (2026-06-16 16:56) and never logs out; host MBDVXJ4XKH9C's own "work"
+// login at epoch 1781630083 that same evening (20:14 — a plausible
+// desktop-to-laptop switch) arrives next in the globally epoch-sorted
+// replay and discards it. This is deliberately a two-host case (unlike the
+// single-host synthetic test above) because the cross-host merge is
+// exactly what makes this the entry that fires in practice — see
+// applyAction's comment for how a same-host reading of the raw earth file
+// alone would misidentify a later earth-only login as the superseder.
+func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
+	cfg := config.Default().Accounting
+	const (
+		discardedHost    = "earth"
+		discardedEpoch   = int64(1781618168)
+		supersedingHost  = "MBDVXJ4XKH9C"
+		supersedingEpoch = int64(1781630083)
+	)
+	entries := []Entry{
+		{ID: 1, Action: actionLogin, Epoch: discardedEpoch, Host: discardedHost, Tags: []string{WorkTag}},
+		{ID: 2, Action: actionLogin, Epoch: supersedingEpoch, Host: supersedingHost, Tags: []string{WorkTag}},
+		{ID: 3, Action: actionLogout, Epoch: supersedingEpoch + secondsPerHour, Host: supersedingHost, Tags: []string{WorkTag}},
+	}
+
+	var warn strings.Builder
+	if _, err := BuildReport(entries, cfg, &warn); err != nil {
+		t.Fatalf("BuildReport: %v", err)
+	}
+
+	msg := warn.String()
+	want := []string{
+		discardedHost, supersedingHost, `"work"`,
+		fmt.Sprintf("%d", discardedEpoch), fmt.Sprintf("%d", supersedingEpoch),
+	}
+	for _, s := range want {
+		if !strings.Contains(msg, s) {
+			t.Fatalf("warning %q missing %q", msg, s)
+		}
 	}
 }
 
@@ -245,7 +302,7 @@ func TestLogoutWithoutLoginErrors(t *testing.T) {
 	cfg := config.Default().Accounting
 	entries := []Entry{mkEntry(1, actionLogout, epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
 
-	if _, err := BuildReport(entries, cfg); err == nil {
+	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
 		t.Fatal("expected an error for logout without a matching login")
 	}
 }
