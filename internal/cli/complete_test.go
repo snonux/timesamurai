@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -215,4 +216,42 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestCompleteHostIDAddressIsRecentFirstAndCapped guards the completion UX
+// against the store's size. The real store holds 12802 entries; offering all
+// of them on a bare Tab fills the pager with entries from years ago, which
+// reads as the completion being broken. Newest-first plus a cap keeps the
+// common case (correcting something logged recently) at the top, and the
+// prefix filter still reaches anything older.
+func TestCompleteHostIDAddressIsRecentFirstAndCapped(t *testing.T) {
+	storeDir := t.TempDir()
+	cmd := completionCmd(t, storeDir)
+
+	// More entries than the cap, ascending in time so "newest" is
+	// unambiguous and is also the highest id.
+	total := maxAddressCompletions + 50
+	base := time.Date(2026, 1, 1, 9, 0, 0, 0, time.Local)
+	for i := 0; i < total; i++ {
+		seedEntry(t, storeDir, "earth", base.Add(time.Duration(i)*time.Hour), []string{"work"}, "")
+	}
+
+	got, directive := completeHostIDAddress(cmd, nil, "")
+	if directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Errorf("directive = %v, want NoFileComp", directive)
+	}
+	if len(got) != maxAddressCompletions {
+		t.Fatalf("offered %d completions, want the cap of %d", len(got), maxAddressCompletions)
+	}
+
+	values := completionValues(got)
+	if want := fmt.Sprintf("earth:%d", total); values[0] != want {
+		t.Errorf("first completion = %q, want the newest entry %q", values[0], want)
+	}
+
+	// A prefix still reaches older entries, since filtering precedes the cap.
+	got, _ = completeHostIDAddress(cmd, nil, "earth:1\t")
+	if len(got) != 0 {
+		t.Errorf("nonsense prefix offered %d completions, want 0", len(got))
+	}
 }

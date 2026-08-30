@@ -24,6 +24,11 @@ import (
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
+// maxAddressCompletions caps how many <host>:<id> candidates a single Tab
+// offers. Large enough that a normal correction ("something I logged this
+// week") is always in the list, small enough that the pager stays readable.
+const maxAddressCompletions = 200
+
 // completionFunc is the shape cobra.Command.ValidArgsFunction and
 // RegisterFlagCompletionFunc both expect, spelled out once so the wiring
 // helper and completer signatures below don't repeat cobra's generic
@@ -113,11 +118,28 @@ func completeHostIDAddress(cmd *cobra.Command, _ []string, toComplete string) ([
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	completions := make([]cobra.Completion, 0, len(rows))
+	matched := make([]worktime.Row, 0, len(rows))
 	for _, row := range rows {
-		if !strings.HasPrefix(row.Address, toComplete) {
-			continue
+		if strings.HasPrefix(row.Address, toComplete) {
+			matched = append(matched, row)
 		}
+	}
+
+	// Newest first, then capped. The store holds the whole history -- 12802
+	// entries here -- and offering all of them on a bare Tab buries the
+	// pager in entries from years ago, which reads as the completion being
+	// broken rather than merely long. The entry someone wants to correct is
+	// almost always a recent one, and typing more of the address still
+	// narrows to anything older because the prefix filter above runs first.
+	sort.SliceStable(matched, func(i, j int) bool {
+		return matched[i].Entry.Epoch > matched[j].Entry.Epoch
+	})
+	if len(matched) > maxAddressCompletions {
+		matched = matched[:maxAddressCompletions]
+	}
+
+	completions := make([]cobra.Completion, 0, len(matched))
+	for _, row := range matched {
 		completions = append(completions, addressCompletion(row))
 	}
 	return completions, cobra.ShellCompDirectiveNoFileComp
