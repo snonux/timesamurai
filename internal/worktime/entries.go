@@ -66,7 +66,7 @@ func Start(ctx context.Context, store *Store, cfg config.AccountingConfig, host 
 		return Entry{}, fmt.Errorf("%w: %q already open on host %q", ErrAlreadyLoggedIn, category, openHost)
 	}
 
-	return insertEntry(ctx, store, cfg, host, actionLogin, tags, epochOf(at), 0, descr)
+	return insertEntry(ctx, store, cfg, host, ActionLogin, tags, epochOf(at), 0, descr)
 }
 
 // Stop closes the open login session for tags (default WorkTag) by writing
@@ -87,7 +87,7 @@ func Stop(ctx context.Context, store *Store, cfg config.AccountingConfig, host s
 		return Entry{}, fmt.Errorf("%w: %q", ErrNotLoggedIn, category)
 	}
 
-	return insertEntry(ctx, store, cfg, host, actionLogout, tags, epochOf(at), 0, descr)
+	return insertEntry(ctx, store, cfg, host, ActionLogout, tags, epochOf(at), 0, descr)
 }
 
 // Add records a positive duration against tags (default WorkTag) on host.
@@ -95,7 +95,7 @@ func Add(ctx context.Context, store *Store, cfg config.AccountingConfig, host st
 	if duration <= 0 {
 		return Entry{}, errors.New("duration must be positive")
 	}
-	return insertEntry(ctx, store, cfg, host, actionAdd, tags, epochOf(at), durationToSeconds(duration), descr)
+	return insertEntry(ctx, store, cfg, host, ActionAdd, tags, epochOf(at), durationToSeconds(duration), descr)
 }
 
 // Sub records a negative duration (a withdrawal) against tags on host.
@@ -103,7 +103,7 @@ func Sub(ctx context.Context, store *Store, cfg config.AccountingConfig, host st
 	if duration <= 0 {
 		return Entry{}, errors.New("duration must be positive")
 	}
-	return insertEntry(ctx, store, cfg, host, actionAdd, tags, epochOf(at), -durationToSeconds(duration), descr)
+	return insertEntry(ctx, store, cfg, host, ActionAdd, tags, epochOf(at), -durationToSeconds(duration), descr)
 }
 
 // UseBuffer withdraws duration from bufferSourceTag and credits it to
@@ -197,7 +197,7 @@ func ParseAddress(addr, currentHost string) (string, int64, error) {
 		idPart = rest
 	}
 
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return "", 0, fmt.Errorf("address %q: %w", addr, err)
 	}
@@ -339,9 +339,9 @@ func openSessionHost(store *Store, cfg config.AccountingConfig, category string)
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(e.Action)) {
-		case actionLogin:
+		case ActionLogin:
 			openHost = e.Host
-		case actionLogout:
+		case ActionLogout:
 			openHost = ""
 		}
 	}

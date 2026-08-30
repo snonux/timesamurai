@@ -1,4 +1,4 @@
-package worktime
+package legacy
 
 import (
 	"context"

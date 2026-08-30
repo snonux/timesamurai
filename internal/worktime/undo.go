@@ -43,7 +43,7 @@ func (s *Store) AppendUndo(ctx context.Context, host string, rec UndoRecord) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (s *Store) UndoLast(ctx context.Context, host string) (UndoRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return UndoRecord{}, err
 	}
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return UndoRecord{}, err
 	}

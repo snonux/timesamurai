@@ -1,4 +1,12 @@
-package worktime
+// Package legacy holds the worktime.rb-era codec, one-shot migration into
+// the JSONL store, and export back out of it — everything that exists only
+// for the dual-tool coexistence window rather than for this tool's own
+// runtime domain logic (see internal/worktime's doc comment for the SRP
+// rationale behind the split, task e81). It depends on internal/worktime
+// for Store, Entry, and the small set of action constants/helpers it
+// exports for exactly this purpose; internal/worktime never depends back on
+// this package.
+package legacy
 
 import (
 	"bytes"
@@ -13,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 const (
@@ -282,7 +292,7 @@ func prepareLegacyEntry(entry LegacyEntry, host string) LegacyEntry {
 		entry.Source = host
 	}
 	entry.Human = FormatLegacyHuman(entry.Epoch)
-	if strings.EqualFold(strings.TrimSpace(entry.Action), actionAdd) {
+	if strings.EqualFold(strings.TrimSpace(entry.Action), worktime.ActionAdd) {
 		entry.valueSet = true
 	}
 	return entry

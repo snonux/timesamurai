@@ -64,11 +64,13 @@ func NewWorkCmd() *cobra.Command {
 		newDeleteCmd(),
 		newUndoCmd(),
 		newEditCmd(),
-		// z61: maintenance verbs built on worktime.Migrate/ExportAll plus a
-		// CLI-local port of the pre-rewrite report.txt line parser (see
-		// import.go's package-boundary note) for one-shot legacy JSON
-		// import, the worktime.rb-parity JSON export, and re-applying an
-		// old report.txt as entries.
+		// z61: maintenance verbs built on internal/worktime/legacy's
+		// Migrate/ExportAll (moved out of internal/worktime by task e81's
+		// core/legacy package split) plus a CLI-local port of the
+		// pre-rewrite report.txt line parser (see import.go's
+		// package-boundary note) for one-shot legacy JSON import, the
+		// worktime.rb-parity JSON export, and re-applying an old report.txt
+		// as entries.
 		newMigrateCmd(),
 		newExportCmd(),
 		newImportCmd(),

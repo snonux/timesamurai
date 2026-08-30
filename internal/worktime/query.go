@@ -21,7 +21,7 @@ import (
 // excluding Sub withdrawals).
 type Filter struct {
 	// Host matches Entry.Host exactly. Hosts are directory-derived names
-	// (see normalizeHost), so comparison is case-sensitive like the rest
+	// (see NormalizeHost), so comparison is case-sensitive like the rest
 	// of the store.
 	Host string
 	// Tag matches when it appears anywhere in Entry.Tags. Comparison is

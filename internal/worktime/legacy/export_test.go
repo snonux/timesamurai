@@ -1,4 +1,4 @@
-package worktime
+package legacy
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func TestExportHost_CreatesFile(t *testing.T) {
@@ -15,11 +17,11 @@ func TestExportHost_CreatesFile(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	entries := []Entry{
+	entries := []worktime.Entry{
 		{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}},
 		{ID: 2, Action: "logout", Epoch: 200, Host: "earth", Tags: []string{"work"}},
 		{ID: 3, Action: "add", Epoch: 300, Host: "earth", Value: 3600, Tags: []string{"work"}, Descr: "notes"},
@@ -72,11 +74,11 @@ func TestExportHost_SecondExportAfterMutationUpdates(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	first := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	first := worktime.Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
 	if err := store.Append(ctx, first); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestExportHost_SecondExportAfterMutationUpdates(t *testing.T) {
 		t.Fatalf("unexpected warning on first export:\n%s", warn.String())
 	}
 
-	second := Entry{ID: 2, Action: "logout", Epoch: 200, Host: "earth", Tags: []string{"work"}}
+	second := worktime.Entry{ID: 2, Action: "logout", Epoch: 200, Host: "earth", Tags: []string{"work"}}
 	if err := store.Append(ctx, second); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -120,11 +122,11 @@ func TestExportHost_DiscardDetectionNamesDivergedEntries(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	kept := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	kept := worktime.Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
 	if err := store.Append(ctx, kept); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -192,11 +194,11 @@ func TestExportHost_DefaultOverwritesWithWarning(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	kept := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	kept := worktime.Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
 	if err := store.Append(ctx, kept); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -252,11 +254,11 @@ func TestExportHost_StrictRefusesOnDiscard(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	kept := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	kept := worktime.Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
 	if err := store.Append(ctx, kept); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -327,7 +329,7 @@ func TestExportHost_NeverErrorsWithMultipleDiscards(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -371,18 +373,18 @@ func TestExportAll_MultiHost(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	earthEntries := []Entry{
+	earthEntries := []worktime.Entry{
 		{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}},
 		{ID: 2, Action: "logout", Epoch: 200, Host: "earth", Tags: []string{"work"}},
 	}
-	marsEntries := []Entry{
+	marsEntries := []worktime.Entry{
 		{ID: 1, Action: "add", Epoch: 50, Host: "mars", Value: 1800, Tags: []string{"selfdevelopment"}, Descr: "reading"},
 	}
-	for _, e := range append(append([]Entry{}, earthEntries...), marsEntries...) {
+	for _, e := range append(append([]worktime.Entry{}, earthEntries...), marsEntries...) {
 		if err := store.Append(ctx, e); err != nil {
 			t.Fatalf("Append %+v: %v", e, err)
 		}
@@ -439,7 +441,7 @@ func TestExportHost_RejectsInvalidHost(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -456,7 +458,7 @@ func TestExportHost_RespectsCancelledContext(t *testing.T) {
 	storeDir := t.TempDir()
 	dbDir := t.TempDir()
 
-	store, err := Open(context.Background(), storeDir)
+	store, err := worktime.Open(context.Background(), storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -469,7 +471,7 @@ func TestExportHost_RespectsCancelledContext(t *testing.T) {
 }
 
 func TestEntryToLegacy_CollapsesMultipleTagsToFirst(t *testing.T) {
-	entry := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work", "offsite"}}
+	entry := worktime.Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work", "offsite"}}
 	leg := entryToLegacy("earth", entry)
 	if leg.What != "work" {
 		t.Fatalf("What = %q, want %q", leg.What, "work")

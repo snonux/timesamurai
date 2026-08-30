@@ -63,7 +63,7 @@ func TestWorkAlwaysPrintsEvenWhenAbsent(t *testing.T) {
 	// Ruby (nil -= Integer) on a day with no work key at all, so that
 	// combination never occurs in real data and isn't a fair case to
 	// assert byte-for-byte behavior against here.
-	entries := []Entry{mkEntry(1, actionAdd, day, 1800, "off")}
+	entries := []Entry{mkEntry(1, ActionAdd, day, 1800, "off")}
 
 	_, out := buildAndFormat(t, cfg, entries)
 	if !strings.Contains(out, "work:0.00h") {
@@ -78,8 +78,8 @@ func TestZeroValueSuppressedExceptWork(t *testing.T) {
 	cfg := config.Default().Accounting
 	day := epochAt(2024, 1, 3, 12, 0, 0)
 	entries := []Entry{
-		mkEntry(1, actionAdd, day, 3600, WorkTag),
-		mkEntry(2, actionAdd, day, 0, "sick"),
+		mkEntry(1, ActionAdd, day, 3600, WorkTag),
+		mkEntry(2, ActionAdd, day, 0, "sick"),
 	}
 
 	_, out := buildAndFormat(t, cfg, entries)
@@ -93,13 +93,13 @@ func TestPrintOrderIsFixedRegardlessOfInsertionOrder(t *testing.T) {
 	day := epochAt(2024, 1, 3, 12, 0, 0)
 	// Insert every category in reverse of the required print order.
 	entries := []Entry{
-		mkEntry(1, actionAdd, day, 60, "selfdevelopment"),
-		mkEntry(2, actionAdd, day, 60, "pet"),
-		mkEntry(3, actionAdd, day, 60, "bank"),
-		mkEntry(4, actionAdd, day, 60, "sick"),
-		mkEntry(5, actionAdd, day, 60, "off"),
-		mkEntry(6, actionAdd, day, 60, "lunch"),
-		mkEntry(7, actionAdd, day, 60, WorkTag),
+		mkEntry(1, ActionAdd, day, 60, "selfdevelopment"),
+		mkEntry(2, ActionAdd, day, 60, "pet"),
+		mkEntry(3, ActionAdd, day, 60, "bank"),
+		mkEntry(4, ActionAdd, day, 60, "sick"),
+		mkEntry(5, ActionAdd, day, 60, "off"),
+		mkEntry(6, ActionAdd, day, 60, "lunch"),
+		mkEntry(7, ActionAdd, day, 60, WorkTag),
 	}
 
 	_, out := buildAndFormat(t, cfg, entries)
@@ -121,10 +121,10 @@ func TestPrintOrderIsFixedRegardlessOfInsertionOrder(t *testing.T) {
 func TestDayMarker(t *testing.T) {
 	cfg := config.Default().Accounting
 	entries := []Entry{
-		mkEntry(1, actionAdd, epochAt(2024, 1, 2, 9, 0, 0), int64(2*secondsPerHour), "off"),   // Tue, off<8h
-		mkEntry(2, actionAdd, epochAt(2024, 1, 3, 9, 0, 0), eightHours, "off"),                // Wed, off==8h
-		mkEntry(3, actionAdd, epochAt(2024, 1, 4, 9, 0, 0), eightHours, "bank"),               // Thu, bank==8h
-		mkEntry(4, actionAdd, epochAt(2024, 1, 6, 9, 0, 0), int64(1*secondsPerHour), WorkTag), // Sat, weekend
+		mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), int64(2*secondsPerHour), "off"),   // Tue, off<8h
+		mkEntry(2, ActionAdd, epochAt(2024, 1, 3, 9, 0, 0), eightHours, "off"),                // Wed, off==8h
+		mkEntry(3, ActionAdd, epochAt(2024, 1, 4, 9, 0, 0), eightHours, "bank"),               // Thu, bank==8h
+		mkEntry(4, ActionAdd, epochAt(2024, 1, 6, 9, 0, 0), int64(1*secondsPerHour), WorkTag), // Sat, weekend
 	}
 
 	weeks, _ := buildAndFormat(t, cfg, entries)
@@ -145,11 +145,11 @@ func TestMinusForSubtractionIsNotDoubled(t *testing.T) {
 	day2 := epochAt(2024, 1, 3, 9, 0, 0) // Wed
 
 	entries := []Entry{
-		mkEntry(1, actionLogin, day1, 0, WorkTag),
-		mkEntry(2, actionLogout, day1+8*secondsPerHour, 0, WorkTag), // 8h work
-		mkEntry(3, actionAdd, day1, secondsPerHour, "lunch"),        // 1h lunch
-		mkEntry(4, actionAdd, day2, 4*secondsPerHour, WorkTag),      // 4h work
-		mkEntry(5, actionAdd, day2, secondsPerHour/2, "lunch"),      // 0.5h lunch
+		mkEntry(1, ActionLogin, day1, 0, WorkTag),
+		mkEntry(2, ActionLogout, day1+8*secondsPerHour, 0, WorkTag), // 8h work
+		mkEntry(3, ActionAdd, day1, secondsPerHour, "lunch"),        // 1h lunch
+		mkEntry(4, ActionAdd, day2, 4*secondsPerHour, WorkTag),      // 4h work
+		mkEntry(5, ActionAdd, day2, secondsPerHour/2, "lunch"),      // 0.5h lunch
 	}
 
 	weeks, out := buildAndFormat(t, cfg, entries)
@@ -177,10 +177,10 @@ func TestPlusForReducesWeeklyTargetAndBalanceAccumulates(t *testing.T) {
 
 	entries := []Entry{
 		// Week 1: 44h work, 4h off (plusfor) -> target 36h -> balance +8h.
-		mkEntry(1, actionAdd, week1Day, 44*secondsPerHour, WorkTag),
-		mkEntry(2, actionAdd, week1Day, 4*secondsPerHour, "off"),
+		mkEntry(1, ActionAdd, week1Day, 44*secondsPerHour, WorkTag),
+		mkEntry(2, ActionAdd, week1Day, 4*secondsPerHour, "off"),
 		// Week 2: 30h work, no plusfor -> target 40h -> weekly balance -10h.
-		mkEntry(3, actionAdd, week2Day, 30*secondsPerHour, WorkTag),
+		mkEntry(3, ActionAdd, week2Day, 30*secondsPerHour, WorkTag),
 	}
 
 	weeks, out := buildAndFormat(t, cfg, entries)
@@ -204,9 +204,9 @@ func TestBufferExcludesLoginLogoutDurations(t *testing.T) {
 	day := epochAt(2024, 1, 2, 9, 0, 0)
 
 	entries := []Entry{
-		mkEntry(1, actionLogin, day, 0, "pet"),
-		mkEntry(2, actionLogout, day+secondsPerHour, 0, "pet"), // 1h, must NOT count as buffer
-		mkEntry(3, actionAdd, day, secondsPerHour/2, "pet"),    // 0.5h add, MUST count as buffer
+		mkEntry(1, ActionLogin, day, 0, "pet"),
+		mkEntry(2, ActionLogout, day+secondsPerHour, 0, "pet"), // 1h, must NOT count as buffer
+		mkEntry(3, ActionAdd, day, secondsPerHour/2, "pet"),    // 0.5h add, MUST count as buffer
 	}
 
 	weeks, _ := buildAndFormat(t, cfg, entries)
@@ -233,9 +233,9 @@ func TestLoginOverwriteSilentlyDiscardsPreviousOpenLogin(t *testing.T) {
 	// closes the SECOND login only. Task v61: the discard must still be
 	// observable, so it's reported to the warn writer instead of nowhere.
 	entries := []Entry{
-		mkEntry(1, actionLogin, t0, 0, WorkTag),
-		mkEntry(2, actionLogin, t1, 0, WorkTag),
-		mkEntry(3, actionLogout, t2, 0, WorkTag),
+		mkEntry(1, ActionLogin, t0, 0, WorkTag),
+		mkEntry(2, ActionLogin, t1, 0, WorkTag),
+		mkEntry(3, ActionLogout, t2, 0, WorkTag),
 	}
 
 	var warn strings.Builder
@@ -276,9 +276,9 @@ func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
 		supersedingEpoch = int64(1781630083)
 	)
 	entries := []Entry{
-		{ID: 1, Action: actionLogin, Epoch: discardedEpoch, Host: discardedHost, Tags: []string{WorkTag}},
-		{ID: 2, Action: actionLogin, Epoch: supersedingEpoch, Host: supersedingHost, Tags: []string{WorkTag}},
-		{ID: 3, Action: actionLogout, Epoch: supersedingEpoch + secondsPerHour, Host: supersedingHost, Tags: []string{WorkTag}},
+		{ID: 1, Action: ActionLogin, Epoch: discardedEpoch, Host: discardedHost, Tags: []string{WorkTag}},
+		{ID: 2, Action: ActionLogin, Epoch: supersedingEpoch, Host: supersedingHost, Tags: []string{WorkTag}},
+		{ID: 3, Action: ActionLogout, Epoch: supersedingEpoch + secondsPerHour, Host: supersedingHost, Tags: []string{WorkTag}},
 	}
 
 	var warn strings.Builder
@@ -300,7 +300,7 @@ func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
 
 func TestLogoutWithoutLoginErrors(t *testing.T) {
 	cfg := config.Default().Accounting
-	entries := []Entry{mkEntry(1, actionLogout, epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
+	entries := []Entry{mkEntry(1, ActionLogout, epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
 
 	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
 		t.Fatal("expected an error for logout without a matching login")
@@ -309,7 +309,7 @@ func TestLogoutWithoutLoginErrors(t *testing.T) {
 
 func TestThreeTrailingNewlinesPerWeekBlock(t *testing.T) {
 	cfg := config.Default().Accounting
-	entries := []Entry{mkEntry(1, actionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
+	entries := []Entry{mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
 
 	_, out := buildAndFormat(t, cfg, entries)
 	if !strings.HasSuffix(out, "\n\n\n") {
@@ -322,7 +322,7 @@ func TestThreeTrailingNewlinesPerWeekBlock(t *testing.T) {
 
 func TestBufferAlwaysPrintedOnWeekLineEvenWhenZero(t *testing.T) {
 	cfg := config.Default().Accounting
-	entries := []Entry{mkEntry(1, actionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
+	entries := []Entry{mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
 
 	_, out := buildAndFormat(t, cfg, entries)
 	if !strings.Contains(out, "buffer:0.00h") {
@@ -336,8 +336,8 @@ func TestCustomTagIsNotFoldedIntoWork(t *testing.T) {
 	// "bulgarian" mirrors a real one-off tag from the live data: not
 	// "work", not in any plusfor/minusfor/bufferfor list.
 	entries := []Entry{
-		mkEntry(1, actionAdd, day, 3600, WorkTag),
-		mkEntry(2, actionAdd, day, 15, "bulgarian"),
+		mkEntry(1, ActionAdd, day, 3600, WorkTag),
+		mkEntry(2, ActionAdd, day, 15, "bulgarian"),
 	}
 
 	weeks, _ := buildAndFormat(t, cfg, entries)

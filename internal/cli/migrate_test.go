@@ -8,9 +8,9 @@ import (
 )
 
 // writeLegacyFixture writes a minimal db.<host>.json under dbDir in the
-// {"entries": {host: [...]}} shape worktime.Migrate reads, for tests that
-// need a synthetic legacy database without depending on internal/worktime's
-// own fixtures under testdata/migrate.
+// {"entries": {host: [...]}} shape legacy.Migrate reads, for tests that
+// need a synthetic legacy database without depending on
+// internal/worktime/legacy's own fixtures under testdata/migrate.
 func writeLegacyFixture(t *testing.T, dbDir, host, entriesJSON string) {
 	t.Helper()
 	raw := `{"entries":{"` + host + `":[` + entriesJSON + `]}}`

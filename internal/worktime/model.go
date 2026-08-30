@@ -13,9 +13,16 @@ const (
 	// WorkTag is the default accounting category for tracked time.
 	WorkTag = "work"
 
-	actionLogin  = "login"
-	actionLogout = "logout"
-	actionAdd    = "add"
+	// ActionLogin, ActionLogout and ActionAdd are the three Entry.Action
+	// values the store and reporter understand. Exported (rather than kept
+	// package-private) so internal/worktime/legacy's migrate/export code can
+	// speak the same action vocabulary as this package without duplicating
+	// the literal strings — the legacy codec/migrate/export split (task e81)
+	// moved those consumers out of this package but they still need to name
+	// these three actions.
+	ActionLogin  = "login"
+	ActionLogout = "logout"
+	ActionAdd    = "add"
 )
 
 // ErrMultipleAccountingTags indicates more than one report accounting tag on an entry.
@@ -110,15 +117,17 @@ func ValidateTags(cfg config.AccountingConfig, tags []string) error {
 	return err
 }
 
-// isValidAction reports whether action (already lowercased/trimmed by the
+// IsValidAction reports whether action (already lowercased/trimmed by the
 // caller) is one of the three actions the store and reporter understand.
 // Shared by ValidateEntry (live inserts/patches, via insertEntry/patchEntry)
-// and by migrate's legacy import, so a row that BuildReport would reject
-// with "unknown action" is caught at the same place for both entry points
-// instead of only surfacing later when a report is built (task 781).
-func isValidAction(action string) bool {
+// and, since it is exported, by internal/worktime/legacy's migrate import
+// (task e81 moved that code out of this package), so a row that BuildReport
+// would reject with "unknown action" is caught at the same place for both
+// entry points instead of only surfacing later when a report is built
+// (task 781).
+func IsValidAction(action string) bool {
 	switch action {
-	case actionLogin, actionLogout, actionAdd:
+	case ActionLogin, ActionLogout, ActionAdd:
 		return true
 	default:
 		return false
@@ -137,7 +146,7 @@ func ValidateEntry(cfg config.AccountingConfig, entry Entry) error {
 	}
 
 	action := strings.ToLower(strings.TrimSpace(entry.Action))
-	if !isValidAction(action) {
+	if !IsValidAction(action) {
 		return fmt.Errorf("unsupported action %q", entry.Action)
 	}
 
@@ -145,7 +154,7 @@ func ValidateEntry(cfg config.AccountingConfig, entry Entry) error {
 		return errors.New("entry epoch must be positive")
 	}
 
-	if action != actionAdd && entry.Value != 0 {
+	if action != ActionAdd && entry.Value != 0 {
 		return fmt.Errorf("action %q must not carry value", action)
 	}
 

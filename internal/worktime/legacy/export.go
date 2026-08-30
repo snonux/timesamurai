@@ -1,4 +1,4 @@
-package worktime
+package legacy
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 // ErrExportWouldDiscard is the sentinel wrapped by ExportHost's error when
@@ -75,11 +77,11 @@ type ExportResult struct {
 // than risk losing a Ruby-side edit during the coexistence window. Discard
 // detection and the JSONL-source-of-truth contract are unchanged either
 // way; Strict only changes what happens once a discard is detected.
-func ExportHost(ctx context.Context, store *Store, dbDir, host string, opts ExportOptions) (ExportResult, error) {
+func ExportHost(ctx context.Context, store *worktime.Store, dbDir, host string, opts ExportOptions) (ExportResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ExportResult{}, err
 	}
-	host, err := normalizeHost(host)
+	host, err := worktime.NormalizeHost(host)
 	if err != nil {
 		return ExportResult{}, err
 	}
@@ -134,7 +136,7 @@ func strictDiscardError(host string, discarded []LegacyEntry) error {
 // contract. In opts.Strict mode a would-be discard on any host IS a hard
 // error (ErrExportWouldDiscard), so ExportAll stops there too, leaving that
 // host's file untouched and every host after it unexported for this run.
-func ExportAll(ctx context.Context, store *Store, dbDir string, opts ExportOptions) ([]ExportResult, error) {
+func ExportAll(ctx context.Context, store *worktime.Store, dbDir string, opts ExportOptions) ([]ExportResult, error) {
 	hosts := store.Hosts()
 	results := make([]ExportResult, 0, len(hosts))
 
@@ -155,7 +157,7 @@ func ExportAll(ctx context.Context, store *Store, dbDir string, opts ExportOptio
 // shape, in the store's own order; SaveLegacyHost sorts and fills in
 // Source/Human before writing, so no ordering or derived-field work is
 // needed here.
-func buildFreshLegacyEntries(host string, entries []Entry) []LegacyEntry {
+func buildFreshLegacyEntries(host string, entries []worktime.Entry) []LegacyEntry {
 	fresh := make([]LegacyEntry, len(entries))
 	for i, e := range entries {
 		fresh[i] = entryToLegacy(host, e)
@@ -172,7 +174,7 @@ func buildFreshLegacyEntries(host string, entries []Entry) []LegacyEntry {
 // conversion (legacyToEntry puts What into Tags[0]), so a migrate-then-
 // export round trip is a no-op for the untouched, single-tag history that
 // makes up the real dataset.
-func entryToLegacy(host string, entry Entry) LegacyEntry {
+func entryToLegacy(host string, entry worktime.Entry) LegacyEntry {
 	leg := LegacyEntry{
 		Action: entry.Action,
 		Epoch:  entry.Epoch,
@@ -182,7 +184,7 @@ func entryToLegacy(host string, entry Entry) LegacyEntry {
 	if len(entry.Tags) > 0 {
 		leg.What = entry.Tags[0]
 	}
-	if strings.EqualFold(strings.TrimSpace(entry.Action), actionAdd) {
+	if strings.EqualFold(strings.TrimSpace(entry.Action), worktime.ActionAdd) {
 		leg.SetValue(entry.Value)
 	}
 	return leg

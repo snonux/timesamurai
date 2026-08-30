@@ -59,7 +59,7 @@ type WeekReport struct {
 
 // openLogin is one still-open login: its start epoch and the host that
 // logged it in. The host is only needed for the superseded-login warning
-// (see applyAction's actionLogin case) — report() itself never keys
+// (see applyAction's ActionLogin case) — report() itself never keys
 // anything on it, since Ruby's login map is category-only too.
 type openLogin struct {
 	Epoch int64
@@ -103,14 +103,14 @@ func OpenLoginsBefore(entries []Entry, before time.Time) []BoundaryLogin {
 		}
 		category := entryCategory(entry)
 		switch strings.ToLower(strings.TrimSpace(entry.Action)) {
-		case actionLogin:
+		case ActionLogin:
 			// Bug-compatible with applyAction: a second login for an
 			// already-open category silently overwrites the first (Ruby's
 			// "already logged in" guard is dead code — see applyAction's
 			// comment). Replaying that same overwrite here keeps this
 			// boundary scan consistent with what a full replay would do.
 			login[category] = openLogin{Epoch: entry.Epoch, Host: entry.Host}
-		case actionLogout:
+		case ActionLogout:
 			delete(login, category)
 		}
 	}
@@ -184,7 +184,7 @@ func newReportState(cfg config.AccountingConfig, warn io.Writer) *reportState {
 // distinct hosts feeding in here does not affect output.
 //
 // warn receives one line per superseded-login discard (see applyAction's
-// actionLogin case for why that discard happens and why it must not be an
+// ActionLogin case for why that discard happens and why it must not be an
 // error) — pass os.Stderr to surface it, or nil/io.Discard to ignore it.
 // This is purely a diagnostic side channel: it never changes the returned
 // []WeekReport, so passing a different warn writer cannot change what gets
@@ -306,15 +306,15 @@ func (s *reportState) process(entry Entry) error {
 // both the entry being thrown away and the one that overwrites it.
 func (s *reportState) applyAction(entry Entry, category string) error {
 	switch action := strings.ToLower(strings.TrimSpace(entry.Action)); action {
-	case actionAdd:
+	case ActionAdd:
 		s.day.values[category] += entry.Value
 		if slices.Contains(s.cfg.BufferFor, category) {
 			s.totalBuffer += entry.Value
 		}
-	case actionLogin:
+	case ActionLogin:
 		s.warnDiscardedLogin(entry, category)
 		s.login[category] = openLogin{Epoch: entry.Epoch, Host: entry.Host}
-	case actionLogout:
+	case ActionLogout:
 		open, ok := s.login[category]
 		if !ok {
 			return fmt.Errorf("logout without login for %q at epoch %d", category, entry.Epoch)

@@ -1,15 +1,16 @@
-package worktime
+package legacy
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 // ErrAlreadyMigrated indicates the JSONL store already has data for a host
@@ -116,14 +117,14 @@ func Migrate(ctx context.Context, dbDir, storeDir string, opts MigrateOptions) (
 		return result, fmt.Errorf("no legacy host sections found in %q", dbDir)
 	}
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		return result, err
 	}
 
 	hosts := sortedHostKeys(byHost)
 	if !opts.Force {
-		if err := refuseIfAlreadyMigrated(storeDir, hosts); err != nil {
+		if err := refuseIfAlreadyMigrated(store, hosts); err != nil {
 			return result, err
 		}
 	}
@@ -155,13 +156,14 @@ func Migrate(ctx context.Context, dbDir, storeDir string, opts MigrateOptions) (
 // NextID returns 1 and behavior is unchanged from a first-time migration. On
 // a Force re-migrate of a host that has since had entries deleted (or whose
 // watermark was raised by an undo restore), starting at 1 again would
-// collide with replaceHostLocked's reuse guard, which rejects any id below
-// the watermark that is not currently present (see store.go). Starting at
-// the watermark instead keeps ids globally non-reused across the host's
-// lifetime, matching the store's "ids never reused" invariant, without
-// needing the allowRestore bypass that undo restore uses for a different
-// purpose (reinstating one specific historical id/entry pair).
-func migrateOneHost(ctx context.Context, store *Store, host string, legacyEntries []LegacyEntry) ([]Entry, []MigrateFinding, error) {
+// collide with Store.ReplaceHost's id-reuse guard, which rejects any id
+// below the watermark that is not currently present (see internal/worktime's
+// store.go). Starting at the watermark instead keeps ids globally
+// non-reused across the host's lifetime, matching the store's "ids never
+// reused" invariant, without needing the allow-restore bypass undo restore
+// uses internally for a different purpose (reinstating one specific
+// historical id/entry pair).
+func migrateOneHost(ctx context.Context, store *worktime.Store, host string, legacyEntries []LegacyEntry) ([]worktime.Entry, []MigrateFinding, error) {
 	startID, err := store.NextID(host)
 	if err != nil {
 		return nil, nil, fmt.Errorf("next id for host %q: %w", host, err)
@@ -203,7 +205,7 @@ func loadLegacyHostsGrouped(ctx context.Context, dbDir string) (map[string][]Leg
 			if host == "" {
 				return nil, fmt.Errorf("empty host section in %q", dbFile)
 			}
-			if _, err := normalizeHost(host); err != nil {
+			if _, err := worktime.NormalizeHost(host); err != nil {
 				return nil, fmt.Errorf("invalid host section %q in %q: %w", host, dbFile, err)
 			}
 			// The host comes from the section key, not leg.Source, so no
@@ -220,15 +222,20 @@ func loadLegacyHostsGrouped(ctx context.Context, dbDir string) (map[string][]Leg
 	return byHost, nil
 }
 
-func refuseIfAlreadyMigrated(storeDir string, hosts []string) error {
+// refuseIfAlreadyMigrated checks store's on-disk layout (via the exported
+// Store.HostFileExists) for a db.<host>.jsonl belonging to any of hosts, and
+// fails on the first one found. Checking store directly rather than
+// re-deriving the JSONL file-naming convention here keeps that convention
+// package-private to internal/worktime, per task e81's "narrow exported
+// surface" requirement.
+func refuseIfAlreadyMigrated(store *worktime.Store, hosts []string) error {
 	for _, host := range hosts {
-		path := filepath.Join(storeDir, dbFileName(host))
-		_, err := os.Stat(path)
-		if err == nil {
-			return fmt.Errorf("%w: host %q (%s)", ErrAlreadyMigrated, host, dbFileName(host))
-		}
-		if !os.IsNotExist(err) {
+		exists, fileName, err := store.HostFileExists(host)
+		if err != nil {
 			return fmt.Errorf("stat store file for host %q: %w", host, err)
+		}
+		if exists {
+			return fmt.Errorf("%w: host %q (%s)", ErrAlreadyMigrated, host, fileName)
 		}
 	}
 	return nil
@@ -238,25 +245,26 @@ func refuseIfAlreadyMigrated(storeDir string, hosts []string) error {
 // increasing id starting at startID (the host's current watermark from the
 // store, or 1 for a host that has never been written). Numbering from the
 // watermark instead of always from 1 keeps a Force re-migrate compatible
-// with replaceHostLocked's id-reuse guard even after prior deletes have
-// left gaps below the watermark.
+// with Store.ReplaceHost's id-reuse guard even after prior deletes have left
+// gaps below the watermark.
 //
-// A row whose action isValidAction rejects (e.g. a typo like "bogus") is
-// quarantined instead of converted: it is left out of the returned entries
-// and reported as a FindingUnknownAction finding instead. Previously such
-// rows were imported unchecked and only surfaced later as a hard failure
-// from BuildReport ("unknown action"), by which point the store already
-// held the bad row and the only fix was manual JSONL surgery (task 781).
-// Ids are only consumed by rows that are actually kept, so quarantining a
-// row never leaves a gap that later confuses the id-reuse guard.
-func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) ([]Entry, []MigrateFinding) {
-	out := make([]Entry, 0, len(legacyEntries))
+// A row whose action worktime.IsValidAction rejects (e.g. a typo like
+// "bogus") is quarantined instead of converted: it is left out of the
+// returned entries and reported as a FindingUnknownAction finding instead.
+// Previously such rows were imported unchecked and only surfaced later as a
+// hard failure from BuildReport ("unknown action"), by which point the store
+// already held the bad row and the only fix was manual JSONL surgery (task
+// 781). Ids are only consumed by rows that are actually kept, so
+// quarantining a row never leaves a gap that later confuses the id-reuse
+// guard.
+func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) ([]worktime.Entry, []MigrateFinding) {
+	out := make([]worktime.Entry, 0, len(legacyEntries))
 	var quarantined []MigrateFinding
 	nextID := startID
 
 	for _, leg := range legacyEntries {
 		action := strings.ToLower(strings.TrimSpace(leg.Action))
-		if !isValidAction(action) {
+		if !worktime.IsValidAction(action) {
 			quarantined = append(quarantined, MigrateFinding{
 				Kind:   FindingUnknownAction,
 				Host:   host,
@@ -277,8 +285,8 @@ func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) 
 // (convertLegacyHost) must have already confirmed the action is valid;
 // legacyToEntry itself no longer re-checks it since that check now decides
 // whether the row is converted at all.
-func legacyToEntry(id int64, host string, leg LegacyEntry) Entry {
-	entry := Entry{
+func legacyToEntry(id int64, host string, leg LegacyEntry) worktime.Entry {
+	entry := worktime.Entry{
 		ID:     id,
 		Action: strings.ToLower(strings.TrimSpace(leg.Action)),
 		Epoch:  leg.Epoch,
@@ -289,19 +297,19 @@ func legacyToEntry(id int64, host string, leg LegacyEntry) Entry {
 	if what != "" {
 		entry.Tags = []string{what}
 	}
-	if leg.HasValue() || entry.Action == actionAdd {
+	if leg.HasValue() || entry.Action == worktime.ActionAdd {
 		entry.Value = leg.Value
 	}
 	return entry
 }
 
-func collectMigrateFindings(host string, legacyEntries []LegacyEntry, entries []Entry) []MigrateFinding {
+func collectMigrateFindings(host string, legacyEntries []LegacyEntry, entries []worktime.Entry) []MigrateFinding {
 	var findings []MigrateFinding
 
 	for _, leg := range legacyEntries {
 		action := strings.ToLower(strings.TrimSpace(leg.Action))
 		tag := strings.TrimSpace(leg.What)
-		if action == actionAdd && leg.HasValue() && leg.Value == 0 {
+		if action == worktime.ActionAdd && leg.HasValue() && leg.Value == 0 {
 			findings = append(findings, MigrateFinding{
 				Kind:   FindingZeroValueAdd,
 				Host:   host,
@@ -312,7 +320,7 @@ func collectMigrateFindings(host string, legacyEntries []LegacyEntry, entries []
 				Detail: "imported add with value==0",
 			})
 		}
-		if action == actionAdd && leg.Value < 0 {
+		if action == worktime.ActionAdd && leg.Value < 0 {
 			findings = append(findings, MigrateFinding{
 				Kind:   FindingNegativeValue,
 				Host:   host,
@@ -329,7 +337,7 @@ func collectMigrateFindings(host string, legacyEntries []LegacyEntry, entries []
 	return findings
 }
 
-func findUnpairedLogins(host string, entries []Entry) []MigrateFinding {
+func findUnpairedLogins(host string, entries []worktime.Entry) []MigrateFinding {
 	type openLogin struct {
 		epoch int64
 		tag   string
@@ -341,19 +349,19 @@ func findUnpairedLogins(host string, entries []Entry) []MigrateFinding {
 		tag := primaryTag(entry.Tags)
 		action := strings.ToLower(strings.TrimSpace(entry.Action))
 		switch action {
-		case actionLogin:
+		case worktime.ActionLogin:
 			if prev, ok := active[tag]; ok {
 				findings = append(findings, MigrateFinding{
 					Kind:   FindingUnpairedLogin,
 					Host:   host,
 					Epoch:  prev.epoch,
-					Action: actionLogin,
+					Action: worktime.ActionLogin,
 					Tag:    prev.tag,
 					Detail: fmt.Sprintf("superseded by login at epoch %d (imported, not dropped)", entry.Epoch),
 				})
 			}
 			active[tag] = openLogin{epoch: entry.Epoch, tag: tag}
-		case actionLogout:
+		case worktime.ActionLogout:
 			if _, ok := active[tag]; ok {
 				delete(active, tag)
 				continue
@@ -362,7 +370,7 @@ func findUnpairedLogins(host string, entries []Entry) []MigrateFinding {
 				Kind:   FindingUnpairedLogin,
 				Host:   host,
 				Epoch:  entry.Epoch,
-				Action: actionLogout,
+				Action: worktime.ActionLogout,
 				Tag:    tag,
 				Detail: "logout without a matching login (imported, not dropped)",
 			})
@@ -374,7 +382,7 @@ func findUnpairedLogins(host string, entries []Entry) []MigrateFinding {
 			Kind:   FindingUnpairedLogin,
 			Host:   host,
 			Epoch:  open.epoch,
-			Action: actionLogin,
+			Action: worktime.ActionLogin,
 			Tag:    open.tag,
 			Detail: "login with no matching logout (imported, not dropped)",
 		})

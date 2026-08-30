@@ -6,17 +6,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/worktime/legacy"
 )
 
 // newExportCmd builds `work export [--strict]`: a rewrite of every host's
 // legacy db.<host>.json from the current JSONL store (q61's
-// worktime.ExportAll), so worktime.rb keeps a report-only-usable view of
-// data that now lives in the store. By default this is warn-and-overwrite;
-// see export.go's package doc comment for why. --strict opts into
-// fail-closed behavior instead, for operators who'd rather the command
-// refuse than silently discard a worktime.rb or hand edit -- see
-// worktime.ExportOptions.Strict.
+// legacy.ExportAll, moved from internal/worktime to internal/worktime/legacy
+// by task e81's core/legacy package split), so worktime.rb keeps a
+// report-only-usable view of data that now lives in the store. By default
+// this is warn-and-overwrite; see export.go's package doc comment (in
+// internal/worktime/legacy) for why. --strict opts into fail-closed
+// behavior instead, for operators who'd rather the command refuse than
+// silently discard a worktime.rb or hand edit -- see
+// legacy.ExportOptions.Strict.
 func newExportCmd() *cobra.Command {
 	var strict bool
 	cmd := &cobra.Command{
@@ -39,7 +41,7 @@ func newExportCmd() *cobra.Command {
 // happened on stdout. Discard warnings themselves already went to stderr
 // by the time ExportAll returns, so the summary just points back at them
 // rather than repeating their content. In --strict mode a refusal comes
-// back as an error wrapping worktime.ErrExportWouldDiscard, which is
+// back as an error wrapping legacy.ErrExportWouldDiscard, which is
 // annotated here with the --strict-specific remediation hint before being
 // returned to cobra for printing.
 func runExport(cmd *cobra.Command, strict bool) error {
@@ -48,10 +50,10 @@ func runExport(cmd *cobra.Command, strict bool) error {
 		return err
 	}
 
-	opts := worktime.ExportOptions{Strict: strict, WarnOut: cmd.ErrOrStderr()}
-	results, err := worktime.ExportAll(cmdContext(cmd), rt.store, rt.cfg.Storage.DBDir, opts)
+	opts := legacy.ExportOptions{Strict: strict, WarnOut: cmd.ErrOrStderr()}
+	results, err := legacy.ExportAll(cmdContext(cmd), rt.store, rt.cfg.Storage.DBDir, opts)
 	if err != nil {
-		if errors.Is(err, worktime.ErrExportWouldDiscard) {
+		if errors.Is(err, legacy.ErrExportWouldDiscard) {
 			return fmt.Errorf("%w; drop --strict to overwrite as before", err)
 		}
 		return err
@@ -66,7 +68,7 @@ func runExport(cmd *cobra.Command, strict bool) error {
 // with no counterpart in the fresh export -- how many were discarded, so
 // stdout always reflects what happened even for a caller not watching
 // stderr.
-func printExportSummary(cmd *cobra.Command, results []worktime.ExportResult) {
+func printExportSummary(cmd *cobra.Command, results []legacy.ExportResult) {
 	for _, r := range results {
 		if len(r.Discarded) > 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "export %s: %d entries written, %d discarded (see warning above)\n",

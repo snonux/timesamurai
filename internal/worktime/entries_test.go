@@ -27,7 +27,7 @@ func TestStart_CreatesLoginAndUndoRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if entry.ID != 1 || entry.Action != actionLogin || entry.Host != "earth" || entry.Epoch != 100 {
+	if entry.ID != 1 || entry.Action != ActionLogin || entry.Host != "earth" || entry.Epoch != 100 {
 		t.Fatalf("unexpected login entry: %+v", entry)
 	}
 	if len(entry.Tags) != 1 || entry.Tags[0] != WorkTag {
@@ -155,7 +155,7 @@ func TestStartStop_FullCycleThenRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if logout.Action != actionLogout || logout.Epoch != 200 {
+	if logout.Action != ActionLogout || logout.Epoch != 200 {
 		t.Fatalf("unexpected logout entry: %+v", logout)
 	}
 
@@ -403,7 +403,7 @@ func TestModify_RejectsInvalidResultAndLeavesStoreUnchanged(t *testing.T) {
 	}
 
 	stored := store.Entries("earth")
-	if len(stored) != 1 || stored[0].Action != actionAdd {
+	if len(stored) != 1 || stored[0].Action != ActionAdd {
 		t.Fatalf("store must be unchanged after rejected modify: %+v", stored)
 	}
 }

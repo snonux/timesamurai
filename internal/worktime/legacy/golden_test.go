@@ -1,4 +1,4 @@
-package worktime
+package legacy
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 // This file is the capstone parity check for the whole worktime rewrite
@@ -113,7 +114,7 @@ func copyLegacyDBFiles(t *testing.T, src, dst string) {
 // caller; dbDir itself is only ever read from (via copyLegacyDBFiles).
 // Shared by TestGolden_ReportMatchesRubyByteForByte and migrateThenExport
 // so the same "copy, then migrate" step isn't written out twice.
-func migrateScratchStore(t *testing.T, ctx context.Context, dbDir string) *Store {
+func migrateScratchStore(t *testing.T, ctx context.Context, dbDir string) *worktime.Store {
 	t.Helper()
 	scratchDB := t.TempDir()
 	copyLegacyDBFiles(t, dbDir, scratchDB)
@@ -123,7 +124,7 @@ func migrateScratchStore(t *testing.T, ctx context.Context, dbDir string) *Store
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open scratch store: %v", err)
 	}
@@ -153,11 +154,11 @@ func TestGolden_ReportMatchesRubyByteForByte(t *testing.T) {
 	ctx := context.Background()
 	store := migrateScratchStore(t, ctx, dbDir)
 
-	weeks, err := BuildReport(CollectEntries(store), config.Default().Accounting, io.Discard)
+	weeks, err := worktime.BuildReport(worktime.CollectEntries(store), config.Default().Accounting, io.Discard)
 	if err != nil {
 		t.Fatalf("BuildReport: %v", err)
 	}
-	got := FormatReport(weeks, false)
+	got := worktime.FormatReport(weeks, false)
 
 	want, err := os.ReadFile(filepath.Join("testdata", "report.golden"))
 	if err != nil {

@@ -89,7 +89,7 @@ func (s *Store) Hosts() []string {
 // making a deep copy"). Without cloning each Tags slice, a caller mutating
 // the Tags of a returned Entry would silently corrupt the in-memory store.
 func (s *Store) Entries(host string) []Entry {
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return nil
 	}
@@ -109,9 +109,39 @@ func (s *Store) Entries(host string) []Entry {
 	return out
 }
 
+// HostFileExists reports whether db.<host>.jsonl already exists on disk for
+// host, independent of what this Store currently holds in memory, along with
+// the file's base name (for callers that want to name it in a message).
+//
+// This exists for internal/worktime/legacy's migrate importer (task e81
+// split that code out of this package): a non-Force migrate needs to refuse
+// overwriting a host that was already migrated, which means checking the
+// store's on-disk layout directly rather than trusting what Open happened to
+// load into memory (a host with zero live entries but a still-present,
+// now-empty db file must still count as "already migrated"). The file-naming
+// convention itself (dbFileName) stays package-private; this method is the
+// narrow, purpose-built way to ask the one question migrate actually needs
+// answered without exposing that convention as its own API.
+func (s *Store) HostFileExists(host string) (exists bool, fileName string, err error) {
+	host, err = NormalizeHost(host)
+	if err != nil {
+		return false, "", err
+	}
+	fileName = dbFileName(host)
+
+	_, statErr := os.Stat(filepath.Join(s.dir, fileName))
+	if statErr == nil {
+		return true, fileName, nil
+	}
+	if os.IsNotExist(statErr) {
+		return false, fileName, nil
+	}
+	return false, fileName, fmt.Errorf("stat store file for host %q: %w", host, statErr)
+}
+
 // NextID returns the next unused id for host without consuming it.
 func (s *Store) NextID(host string) (int64, error) {
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return 0, err
 	}
@@ -124,7 +154,7 @@ func (s *Store) NextID(host string) (int64, error) {
 
 // AllocID consumes and returns the next unused id for host.
 func (s *Store) AllocID(host string) (int64, error) {
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return 0, err
 	}
@@ -145,7 +175,7 @@ func (s *Store) Append(ctx context.Context, entry Entry) error {
 		return err
 	}
 
-	host, err := normalizeHost(entry.Host)
+	host, err := NormalizeHost(entry.Host)
 	if err != nil {
 		return err
 	}
@@ -198,7 +228,7 @@ func (s *Store) ReplaceHost(ctx context.Context, host string, entries []Entry) e
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	host, err := normalizeHost(host)
+	host, err := NormalizeHost(host)
 	if err != nil {
 		return err
 	}
@@ -576,7 +606,7 @@ func normalizeHostEntries(host string, entries []Entry) ([]Entry, error) {
 		if entryHost == "" {
 			e.Host = host
 		} else {
-			normalized, err := normalizeHost(entryHost)
+			normalized, err := NormalizeHost(entryHost)
 			if err != nil {
 				return nil, err
 			}
@@ -608,7 +638,15 @@ func sortEntriesByEpoch(entries []Entry) {
 	})
 }
 
-func normalizeHost(host string) (string, error) {
+// NormalizeHost trims host and rejects empty names, path-traversal segments,
+// and newline/NUL bytes, since host feeds directly into db.<host>.jsonl and
+// undo.<host>.jsonl file names.
+//
+// Exported (rather than kept package-private) so internal/worktime/legacy's
+// migrate/export code — split out of this package in task e81 — can apply
+// the same host-name validation the store itself uses, without duplicating
+// the rules or reaching into store internals.
+func NormalizeHost(host string) (string, error) {
 	host = strings.TrimSpace(host)
 	if host == "" {
 		return "", errors.New("host must not be empty")
@@ -636,7 +674,7 @@ func hostFromDBPath(path string) (string, error) {
 		return "", fmt.Errorf("unexpected db file name %q", base)
 	}
 	host := strings.TrimSuffix(strings.TrimPrefix(base, dbFilePrefix), dbFileSuffix)
-	return normalizeHost(host)
+	return NormalizeHost(host)
 }
 
 func hostFromUndoPath(path string) (string, error) {
@@ -645,5 +683,5 @@ func hostFromUndoPath(path string) (string, error) {
 		return "", fmt.Errorf("unexpected undo file name %q", base)
 	}
 	host := strings.TrimSuffix(strings.TrimPrefix(base, undoFilePrefix), undoFileSuffix)
-	return normalizeHost(host)
+	return NormalizeHost(host)
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/worktime/legacy"
 )
 
 // TestExport_WritesLegacyJSON confirms `work export --db ...` regenerates
@@ -29,7 +29,7 @@ func TestExport_WritesLegacyJSON(t *testing.T) {
 		t.Fatalf("output = %q, want it to report 1 entry written", out)
 	}
 
-	db, err := worktime.LoadLegacyHost(context.Background(), dbDir, host)
+	db, err := legacy.LoadLegacyHost(context.Background(), dbDir, host)
 	if err != nil {
 		t.Fatalf("LoadLegacyHost: %v", err)
 	}

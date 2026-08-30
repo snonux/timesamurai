@@ -1,4 +1,4 @@
-package worktime
+package legacy
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 // Real-data reminders (not loaded here — fixtures stay small):
@@ -41,12 +42,17 @@ func TestMigrate_ImportsArchiveSplitAndFindings(t *testing.T) {
 		t.Fatalf("db.archive.jsonl must not exist, stat err=%v", err)
 	}
 	for _, host := range wantHosts {
-		if _, err := os.Stat(filepath.Join(storeDir, dbFileName(host))); err != nil {
-			t.Fatalf("missing %s: %v", dbFileName(host), err)
+		// db.<host>.jsonl is the store's documented on-disk naming
+		// convention (see Store's doc comment in internal/worktime); this
+		// test names it literally rather than importing the unexported
+		// dbFileName helper, which stays package-private to worktime.
+		wantFile := "db." + host + ".jsonl"
+		if _, err := os.Stat(filepath.Join(storeDir, wantFile)); err != nil {
+			t.Fatalf("missing %s: %v", wantFile, err)
 		}
 	}
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open store: %v", err)
 	}
@@ -110,7 +116,7 @@ func TestMigrate_RefuseSecondRunUnlessForce(t *testing.T) {
 	}
 
 	// Store unchanged: still three host files, earth still has 5 entries.
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -125,7 +131,7 @@ func TestMigrate_RefuseSecondRunUnlessForce(t *testing.T) {
 	if result.Entries != 8 {
 		t.Fatalf("force Entries = %d, want 8", result.Entries)
 	}
-	store, err = Open(ctx, storeDir)
+	store, err = worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("re-Open: %v", err)
 	}
@@ -239,7 +245,7 @@ func TestMigrate_PreservesSameEpochOrderAndIDs(t *testing.T) {
 		t.Fatalf("Entries = %d", result.Entries)
 	}
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,12 +270,12 @@ func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
 	ctx := context.Background()
 	storeDir := t.TempDir()
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open store: %v", err)
 	}
 	for i, action := range []string{"login", "logout", "add"} {
-		entry := Entry{
+		entry := worktime.Entry{
 			ID:     int64(i + 1),
 			Action: action,
 			Epoch:  int64(1000 + i),
@@ -283,7 +289,7 @@ func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
 			t.Fatalf("Append entry %d: %v", i+1, err)
 		}
 	}
-	if _, err := Delete(ctx, store, "earth:1", "earth"); err != nil {
+	if _, err := worktime.Delete(ctx, store, "earth:1", "earth"); err != nil {
 		t.Fatalf("Delete earth:1: %v", err)
 	}
 	// Watermark stays at 4 (ids never reused) even though id 1 is now gone.
@@ -311,7 +317,7 @@ func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
 		t.Fatalf("Entries = %d, want 1", result.Entries)
 	}
 
-	reopened, err := Open(ctx, storeDir)
+	reopened, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("re-Open store: %v", err)
 	}
@@ -335,7 +341,7 @@ func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NextID: %v", err)
 	}
-	if err := reopened.Append(ctx, Entry{ID: next, Action: "logout", Epoch: 3000, Host: "earth", Tags: []string{"work"}}); err != nil {
+	if err := reopened.Append(ctx, worktime.Entry{ID: next, Action: "logout", Epoch: 3000, Host: "earth", Tags: []string{"work"}}); err != nil {
 		t.Fatalf("Append after force migrate: %v", err)
 	}
 }
@@ -388,7 +394,7 @@ func TestMigrate_QuarantinesUnknownAction(t *testing.T) {
 		t.Fatalf("report missing unknown-action finding:\n%s", report.String())
 	}
 
-	store, err := Open(ctx, storeDir)
+	store, err := worktime.Open(ctx, storeDir)
 	if err != nil {
 		t.Fatalf("Open store: %v", err)
 	}
@@ -404,7 +410,7 @@ func TestMigrate_QuarantinesUnknownAction(t *testing.T) {
 
 	// The store must now be report-safe: BuildReport must not fail with
 	// "unknown action" the way it did before this fix quarantined the row.
-	if _, err := BuildReport(earth, config.Default().Accounting, io.Discard); err != nil {
+	if _, err := worktime.BuildReport(earth, config.Default().Accounting, io.Discard); err != nil {
 		t.Fatalf("BuildReport after migrate: %v", err)
 	}
 }

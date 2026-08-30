@@ -6,15 +6,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/snonux/timesamurai/internal/worktime"
+	"github.com/snonux/timesamurai/internal/worktime/legacy"
 )
 
 // newMigrateCmd builds `work migrate [--force]`, the one-shot import of
-// legacy db.*.json into the JSONL store (p61's worktime.Migrate). Unlike
-// every other work subcommand this does not go through newRuntime: Migrate
-// takes dbDir/storeDir directly and opens/writes the store itself, so
-// pre-opening it here (as newRuntime would) would just be redundant I/O and
-// would also resolve a hostname migrate never uses.
+// legacy db.*.json into the JSONL store (p61's legacy.Migrate, moved from
+// internal/worktime to internal/worktime/legacy by task e81's core/legacy
+// package split). Unlike every other work subcommand this does not go
+// through newRuntime: Migrate takes dbDir/storeDir directly and
+// opens/writes the store itself, so pre-opening it here (as newRuntime
+// would) would just be redundant I/O and would also resolve a hostname
+// migrate never uses.
 func newMigrateCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
@@ -31,7 +33,7 @@ func newMigrateCmd() *cobra.Command {
 }
 
 // runMigrate loads --db/--store-aware config and delegates to
-// worktime.Migrate, which writes its own human-readable report straight to
+// legacy.Migrate, which writes its own human-readable report straight to
 // cmd's stdout via MigrateOptions.Report -- so there is nothing left to
 // format here. The one thing this wraps is ErrAlreadyMigrated, adding the
 // --force hint so a refused migrate tells the operator exactly how to
@@ -43,12 +45,12 @@ func runMigrate(cmd *cobra.Command, force bool) error {
 		return err
 	}
 
-	_, err = worktime.Migrate(ctx, cfg.Storage.DBDir, cfg.Storage.StoreDir, worktime.MigrateOptions{
+	_, err = legacy.Migrate(ctx, cfg.Storage.DBDir, cfg.Storage.StoreDir, legacy.MigrateOptions{
 		Force:  force,
 		Report: cmd.OutOrStdout(),
 	})
 	if err != nil {
-		if errors.Is(err, worktime.ErrAlreadyMigrated) {
+		if errors.Is(err, legacy.ErrAlreadyMigrated) {
 			return fmt.Errorf("%w; pass --force to re-run against a scratch copy", err)
 		}
 		return err
