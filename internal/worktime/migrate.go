@@ -49,6 +49,13 @@ type MigrateFinding struct {
 	Detail string
 }
 
+// MigrateResult summarizes hosts written and findings reported.
+type MigrateResult struct {
+	Hosts    []string
+	Entries  int
+	Findings []MigrateFinding
+}
+
 // String returns a single-line description of the finding.
 func (f MigrateFinding) String() string {
 	when := time.Unix(f.Epoch, 0).UTC().Format(time.RFC3339)
@@ -66,13 +73,6 @@ func (f MigrateFinding) String() string {
 		base += ": " + f.Detail
 	}
 	return base
-}
-
-// MigrateResult summarizes hosts written and findings reported.
-type MigrateResult struct {
-	Hosts    []string
-	Entries  int
-	Findings []MigrateFinding
 }
 
 // Migrate imports every db.*.json under dbDir into storeDir as per-host JSONL.

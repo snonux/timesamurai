@@ -63,6 +63,19 @@ func Load(ctx context.Context, opts LoadOptions) (Config, error) {
 	return cfg, nil
 }
 
+// ConfigPath returns $XDG_CONFIG_HOME/timesamurai/config.toml, falling back to
+// ~/.config/timesamurai/config.toml when XDG_CONFIG_HOME is unset.
+func ConfigPath() (string, error) {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+		return filepath.Join(xdg, configDirName, configFileName), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", configDirName, configFileName), nil
+}
+
 func noticeWriter(opts LoadOptions) io.Writer {
 	if opts.NoticeWriter != nil {
 		return opts.NoticeWriter
@@ -77,19 +90,6 @@ func applyStoreDirFallback(cfg *Config, ov *overlay) {
 	if ov.Storage.DBDir != nil && ov.Storage.StoreDir == nil {
 		cfg.Storage.StoreDir = ""
 	}
-}
-
-// ConfigPath returns $XDG_CONFIG_HOME/timesamurai/config.toml, falling back to
-// ~/.config/timesamurai/config.toml when XDG_CONFIG_HOME is unset.
-func ConfigPath() (string, error) {
-	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
-		return filepath.Join(xdg, configDirName, configFileName), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", configDirName, configFileName), nil
 }
 
 func resolveConfigPath(override string) (string, error) {

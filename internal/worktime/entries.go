@@ -48,25 +48,6 @@ type EntryPatch struct {
 	Descr *string
 }
 
-func (p EntryPatch) apply(entry Entry) Entry {
-	if p.Action != nil {
-		entry.Action = strings.ToLower(strings.TrimSpace(*p.Action))
-	}
-	if p.Epoch != nil {
-		entry.Epoch = *p.Epoch
-	}
-	if p.Value != nil {
-		entry.Value = *p.Value
-	}
-	if p.Tags != nil {
-		entry.Tags = defaultTags(*p.Tags)
-	}
-	if p.Descr != nil {
-		entry.Descr = strings.TrimSpace(*p.Descr)
-	}
-	return entry
-}
-
 // Start opens a login session for tags (default WorkTag when tags is empty)
 // on host at "at" (time.Now() when zero). It fails if that category already
 // has an open login anywhere in the store, since a person cannot be doing
@@ -225,6 +206,25 @@ func ParseAddress(addr, currentHost string) (string, int64, error) {
 		return "", 0, fmt.Errorf("address %q: invalid entry id", addr)
 	}
 	return host, id, nil
+}
+
+func (p EntryPatch) apply(entry Entry) Entry {
+	if p.Action != nil {
+		entry.Action = strings.ToLower(strings.TrimSpace(*p.Action))
+	}
+	if p.Epoch != nil {
+		entry.Epoch = *p.Epoch
+	}
+	if p.Value != nil {
+		entry.Value = *p.Value
+	}
+	if p.Tags != nil {
+		entry.Tags = defaultTags(*p.Tags)
+	}
+	if p.Descr != nil {
+		entry.Descr = strings.TrimSpace(*p.Descr)
+	}
+	return entry
 }
 
 // insertEntry peeks the next id for host, builds and validates an entry,
