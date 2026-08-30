@@ -517,6 +517,71 @@ func TestStore_MultiHost(t *testing.T) {
 	}
 }
 
+// TestStore_EntriesReturnsDeepCopy is a regression test for task 881 (100 Go
+// Mistakes #25): Entries() must return Entry structs whose Tags slice does
+// not alias the store's backing array. Mutating Tags on a returned Entry
+// must never be visible in a subsequent call to Entries().
+func TestStore_EntriesReturnsDeepCopy(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	entry := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	if err := store.Append(ctx, entry); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	got := store.Entries("earth")
+	if len(got) != 1 {
+		t.Fatalf("Entries len: got %d want 1", len(got))
+	}
+
+	// Mutate the Tags slice on the returned Entry in place.
+	got[0].Tags[0] = "corrupted"
+	got[0].Tags = append(got[0].Tags, "extra")
+
+	again := store.Entries("earth")
+	if len(again) != 1 {
+		t.Fatalf("Entries len after mutation: got %d want 1", len(again))
+	}
+	if len(again[0].Tags) != 1 || again[0].Tags[0] != "work" {
+		t.Fatalf("store corrupted by mutating a returned Entry's Tags: got %+v", again[0].Tags)
+	}
+}
+
+// TestStore_AppendClonesTagsSlice is a regression test for task 881 (100 Go
+// Mistakes #25): Append() must clone the caller-supplied Tags slice on
+// ingest. Mutating that slice locally after Append returns must not affect
+// the entry stored in the Store.
+func TestStore_AppendClonesTagsSlice(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	tags := []string{"work"}
+	entry := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: tags}
+	if err := store.Append(ctx, entry); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	// Mutate the local slice that was passed into Append.
+	tags[0] = "corrupted"
+
+	got := store.Entries("earth")
+	if len(got) != 1 {
+		t.Fatalf("Entries len: got %d want 1", len(got))
+	}
+	if len(got[0].Tags) != 1 || got[0].Tags[0] != "work" {
+		t.Fatalf("store corrupted by mutating the caller's pre-Append Tags slice: got %+v", got[0].Tags)
+	}
+}
+
 func entryEqual(a, b Entry) bool {
 	if a.ID != b.ID || a.Action != b.Action || a.Epoch != b.Epoch || a.Host != b.Host || a.Value != b.Value || a.Descr != b.Descr {
 		return false

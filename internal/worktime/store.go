@@ -82,6 +82,12 @@ func (s *Store) Hosts() []string {
 
 // Entries returns a defensive copy of the entries for host, sorted by epoch.
 // Unknown hosts yield a nil slice.
+//
+// The copy is deep with respect to Tags: copy(out, entries) only duplicates
+// the Entry structs, and Entry.Tags is a slice header that would otherwise
+// still point at the store's backing array (100 Go Mistakes #25 — "not
+// making a deep copy"). Without cloning each Tags slice, a caller mutating
+// the Tags of a returned Entry would silently corrupt the in-memory store.
 func (s *Store) Entries(host string) []Entry {
 	host, err := normalizeHost(host)
 	if err != nil {
@@ -97,6 +103,9 @@ func (s *Store) Entries(host string) []Entry {
 	}
 	out := make([]Entry, len(entries))
 	copy(out, entries)
+	for i := range out {
+		out[i].Tags = slices.Clone(out[i].Tags)
+	}
 	return out
 }
 
@@ -145,6 +154,12 @@ func (s *Store) Append(ctx context.Context, entry Entry) error {
 	if entry.ID <= 0 {
 		return errors.New("entry id must be positive")
 	}
+
+	// Clone Tags on ingest so the stored Entry owns its backing array.
+	// Otherwise a caller mutating the slice it passed to Append after this
+	// call returns would silently mutate the store's copy too (100 Go
+	// Mistakes #25).
+	entry.Tags = slices.Clone(entry.Tags)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -545,6 +560,12 @@ func idFromRawEntry(raw json.RawMessage) (int64, error) {
 	return entry.ID, nil
 }
 
+// normalizeHostEntries validates and normalizes entries for host, and clones
+// each Entry's Tags slice so the returned entries (which ReplaceHost stores
+// directly into s.byHost) do not alias the caller-supplied Tags backing
+// arrays. Without this, a caller mutating a Tags slice it passed into
+// ReplaceHost could later corrupt the store's in-memory state (100 Go
+// Mistakes #25).
 func normalizeHostEntries(host string, entries []Entry) ([]Entry, error) {
 	out := make([]Entry, len(entries))
 	for i, e := range entries {
@@ -564,6 +585,7 @@ func normalizeHostEntries(host string, entries []Entry) ([]Entry, error) {
 			}
 			e.Host = host
 		}
+		e.Tags = slices.Clone(e.Tags)
 		out[i] = e
 	}
 	return out, nil
