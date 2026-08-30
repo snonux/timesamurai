@@ -140,6 +140,48 @@ func TestListUntilFlagOverridesRangeEnd(t *testing.T) {
 	}
 }
 
+// TestListUntilTodayIncludesLaterEntriesSameDay is a regression test for
+// task 381: --until is documented as an inclusive upper bound, but "today"
+// used to parse to midnight (start of day), so an entry added later the same
+// day was wrongly excluded. --until now resolves day-granularity values
+// (today/yesterday/bare dates) to the end of that day via
+// timefmt.ParseUntil, matching how positional ranges already behave.
+func TestListUntilTodayIncludesLaterEntriesSameDay(t *testing.T) {
+	store := newScratchStore(t)
+
+	if _, err := runWork(t, store, "add", "1h", "work", "--at", "12:00", "--descr", "noon-today"); err != nil {
+		t.Fatalf("work add noon-today: %v", err)
+	}
+
+	out, err := runWork(t, store, "list", "--until", "today")
+	if err != nil {
+		t.Fatalf("work list --until today: %v", err)
+	}
+	if !strings.Contains(out, "noon-today") {
+		t.Errorf("list --until today should include an entry at noon today, got:\n%s", out)
+	}
+}
+
+// TestListUntilDateOnlyIncludesLaterEntriesSameDay is the bare-date
+// counterpart of TestListUntilTodayIncludesLaterEntriesSameDay: --until
+// 2026-01-12 must include an entry at noon on the 12th, not just entries up
+// to midnight at the start of the 12th.
+func TestListUntilDateOnlyIncludesLaterEntriesSameDay(t *testing.T) {
+	store := newScratchStore(t)
+
+	if _, err := runWork(t, store, "add", "1h", "work", "--at", "2026-01-12T12:00", "--descr", "noon-on-date"); err != nil {
+		t.Fatalf("work add noon-on-date: %v", err)
+	}
+
+	out, err := runWork(t, store, "list", "--until", "2026-01-12")
+	if err != nil {
+		t.Fatalf("work list --until 2026-01-12: %v", err)
+	}
+	if !strings.Contains(out, "noon-on-date") {
+		t.Errorf("list --until 2026-01-12 should include an entry at noon on that date, got:\n%s", out)
+	}
+}
+
 // TestListJSONFormatMatchesQueryShape confirms --format json round-trips
 // through worktime.FormatJSON's documented wire shape (address + Entry
 // fields), rather than some CLI-local JSON encoding.

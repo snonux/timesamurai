@@ -153,9 +153,16 @@ func buildFilter(rangeArg string, f filterFlagValues) (worktime.Filter, error) {
 }
 
 // applyTimeBoundFlags overrides filter's Since/Until with --since/--until
-// when set, parsed the same way --at is (internal/timefmt.ParseTime), so a
-// bound can be a clock time, ISO date, "today"/"yesterday", or a relative
-// offset, not just a bare date.
+// when set, accepting the same formats as --at (clock time, ISO date,
+// "today"/"yesterday", or a relative offset). --since is parsed with
+// timefmt.ParseTime, which resolves a bare date/today/yesterday to that
+// day's midnight -- correct for a lower bound. --until is parsed with
+// timefmt.ParseUntil instead: since --until is documented as an *inclusive*
+// upper bound, a bare date/today/yesterday there must resolve to the end of
+// that day (not its midnight start), or entries later that same day would be
+// wrongly excluded (task 381). Clock times, RFC3339, and other instant
+// values are returned unchanged by ParseUntil, so their exact-instant
+// semantics are unaffected.
 func applyTimeBoundFlags(filter *worktime.Filter, f filterFlagValues) error {
 	if f.since != "" {
 		t, err := timefmt.ParseTime(f.since)
@@ -165,7 +172,7 @@ func applyTimeBoundFlags(filter *worktime.Filter, f filterFlagValues) error {
 		filter.Since = t
 	}
 	if f.until != "" {
-		t, err := timefmt.ParseTime(f.until)
+		t, err := timefmt.ParseUntil(f.until)
 		if err != nil {
 			return fmt.Errorf("--until: %w", err)
 		}

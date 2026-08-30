@@ -168,3 +168,102 @@ func TestParseTimeWrapper(t *testing.T) {
 		t.Fatalf("ParseTime(today) error = %v", err)
 	}
 }
+
+// TestParseUntilAtDayGranularity is the task 381 regression test: unlike
+// ParseTimeAt, ParseUntilAt must resolve today/yesterday/bare-date values to
+// the last nanosecond of that day (not its midnight start), so --until stays
+// an inclusive upper bound for entries later the same day.
+func TestParseUntilAtDayGranularity(t *testing.T) {
+	loc := time.FixedZone("EET", 2*3600)
+	now := time.Date(2026, 8, 25, 15, 4, 5, 0, loc)
+
+	tests := []struct {
+		name  string
+		input string
+		want  time.Time
+	}{
+		{
+			name:  "today",
+			input: "today",
+			want:  time.Date(2026, 8, 25, 23, 59, 59, 999999999, loc),
+		},
+		{
+			name:  "yesterday",
+			input: "yesterday",
+			want:  time.Date(2026, 8, 24, 23, 59, 59, 999999999, loc),
+		},
+		{
+			name:  "date only",
+			input: "2026-08-20",
+			want:  time.Date(2026, 8, 20, 23, 59, 59, 999999999, loc),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseUntilAt(test.input, now)
+			if err != nil {
+				t.Fatalf("ParseUntilAt(%q) error = %v", test.input, err)
+			}
+			if !got.Equal(test.want) {
+				t.Fatalf("ParseUntilAt(%q) = %v, want %v", test.input, got, test.want)
+			}
+		})
+	}
+}
+
+// TestParseUntilAtInstantGranularityUnchanged confirms ParseUntilAt leaves
+// exact-instant values (clock times, datetimes with a time-of-day, RFC3339,
+// relative offsets) untouched -- only day-granularity values shift to
+// end-of-day.
+func TestParseUntilAtInstantGranularityUnchanged(t *testing.T) {
+	loc := time.FixedZone("EET", 2*3600)
+	now := time.Date(2026, 8, 25, 15, 4, 5, 0, loc)
+
+	tests := []struct {
+		name  string
+		input string
+		want  time.Time
+	}{
+		{
+			name:  "clock",
+			input: "09:00",
+			want:  time.Date(2026, 8, 25, 9, 0, 0, 0, loc),
+		},
+		{
+			name:  "datetime minutes",
+			input: "2026-08-25T09:00",
+			want:  time.Date(2026, 8, 25, 9, 0, 0, 0, loc),
+		},
+		{
+			name:  "rfc3339",
+			input: "2026-08-25T09:00:00Z",
+			want:  time.Date(2026, 8, 25, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "relative hours ago",
+			input: "-2h",
+			want:  now.Add(-2 * time.Hour),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseUntilAt(test.input, now)
+			if err != nil {
+				t.Fatalf("ParseUntilAt(%q) error = %v", test.input, err)
+			}
+			if !got.Equal(test.want) {
+				t.Fatalf("ParseUntilAt(%q) = %v, want %v", test.input, got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseUntilWrapper(t *testing.T) {
+	if _, err := ParseUntil("today"); err != nil {
+		t.Fatalf("ParseUntil(today) error = %v", err)
+	}
+}
