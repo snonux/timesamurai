@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="timesamurai">
+  <title>timesamurai</title>
+  <desc>An enso brush ring as a clock face, with two katana blades for hands.</desc>
+
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2230"/>
+      <stop offset="1" stop-color="#0e131c"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#8f9dae"/>
+      <stop offset="0.42" stop-color="#f4f8fc"/>
+      <stop offset="0.58" stop-color="#e2e9f1"/>
+      <stop offset="1"    stop-color="#7d8a9b"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6f3ea"/>
+      <stop offset="1" stop-color="#cfd6c8"/>
+    </linearGradient>
+
+    <!-- One katana hand, pointing up from the pivot at (0,0). The blade
+         carries the slight sori (curve) of a real katana on both edges, so
+         it still reads as a sword and not a triangle at icon size. -->
+    <g id="hand-long">
+      <rect x="-3.5" y="4" width="7" height="20" rx="3.5" fill="#2a3242"/>
+      <rect x="-11"  y="0" width="22" height="6" rx="3"   fill="#d9a441"/>
+      <path d="M -4.6 0 Q -5.6 -40 -4 -78 Q -2.4 -90 0 -96 Q 2.4 -90 4 -78 Q 5.6 -40 4.6 0 Z" fill="url(#steel)"/>
+      <path d="M 0 -92 Q 1.5 -60 2 -22 L 2 -1 L 0.8 -1 Q 0.4 -46 0 -92 Z" fill="#ffffff" opacity="0.5"/>
+    </g>
+
+    <g id="hand-short">
+      <rect x="-3.5" y="4" width="7" height="20" rx="3.5" fill="#2a3242"/>
+      <rect x="-11"  y="0" width="22" height="6" rx="3"   fill="#d9a441"/>
+      <path d="M -4.6 0 Q -5.6 -26 -4 -52 Q -2.4 -62 0 -67 Q 2.4 -62 4 -52 Q 5.6 -26 4.6 0 Z" fill="url(#steel)"/>
+      <path d="M 0 -63 Q 1.5 -42 2 -16 L 2 -1 L 0.8 -1 Q 0.4 -32 0 -63 Z" fill="#ffffff" opacity="0.5"/>
+    </g>
+
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#plate)"/>
+
+  <!-- Enso: a single brush stroke left deliberately open, the traditional
+       unclosed circle. Two arcs of different weight fake the taper a real
+       brush leaves as it lifts. -->
+  <g fill="none" stroke="url(#ink)" stroke-linecap="round" transform="rotate(128 128 128)">
+    <path d="M 128 34 A 94 94 0 1 1 61.5 61.5" stroke-width="15" opacity="0.96"/>
+    <path d="M 128 34 A 94 94 0 0 1 205 74"   stroke-width="9"  opacity="0.5"/>
+  </g>
+
+  <!-- Hour marks at 12/3/6/9, inside the ring. -->
+  <g fill="#7b8798">
+    <rect x="125" y="52"  width="6" height="16" rx="3"/>
+    <rect x="125" y="188" width="6" height="16" rx="3"/>
+    <rect x="52"  y="125" width="16" height="6" rx="3"/>
+    <rect x="188" y="125" width="16" height="6" rx="3"/>
+  </g>
+
+  <g transform="translate(128 128)">
+    <use href="#hand-short" transform="rotate(-62)"/>
+    <use href="#hand-long"  transform="rotate(52)"/>
+    <circle r="7.5" fill="#d8443c"/>
+    <circle r="3"   fill="#121620"/>
+  </g>
+</svg>
