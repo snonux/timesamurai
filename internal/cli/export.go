@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -41,9 +40,9 @@ func newExportCmd() *cobra.Command {
 // happened on stdout. Discard warnings themselves already went to stderr
 // by the time ExportAll returns, so the summary just points back at them
 // rather than repeating their content. In --strict mode a refusal comes
-// back as an error wrapping legacy.ErrExportWouldDiscard, which is
-// annotated here with the --strict-specific remediation hint before being
-// returned to cobra for printing.
+// back as an error wrapping legacy.ErrExportWouldDiscard whose message
+// (built by strictDiscardError) already includes the --strict-specific
+// remediation hint, so it's returned to cobra as-is.
 func runExport(cmd *cobra.Command, strict bool) error {
 	rt, err := newRuntime(cmd)
 	if err != nil {
@@ -53,9 +52,6 @@ func runExport(cmd *cobra.Command, strict bool) error {
 	opts := legacy.ExportOptions{Strict: strict, WarnOut: cmd.ErrOrStderr()}
 	results, err := legacy.ExportAll(cmdContext(cmd), rt.store, rt.cfg.Storage.DBDir, opts)
 	if err != nil {
-		if errors.Is(err, legacy.ErrExportWouldDiscard) {
-			return fmt.Errorf("%w; drop --strict to overwrite as before", err)
-		}
 		return err
 	}
 
