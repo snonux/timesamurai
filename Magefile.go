@@ -1,5 +1,10 @@
 //go:build mage
 
+// Timesamurai mage targets: build, run, test, vet, lint, install, completions.
+// Mirrors the Mage conventions used across other projects (e.g. hexai): a
+// binaryName constant used everywhere the built binary's name is referenced,
+// a Default target that depends on Build via mg.Deps, and Install building
+// first (via mg.Deps(Build)) before copying the binary into GOPATH/bin.
 package main
 
 import (
@@ -8,14 +13,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
 
-var Default = Build
+// binaryName is the name of the built timesamurai binary. Defined once here
+// so Build, Install, and Completions don't each hardcode the literal.
+const binaryName = "timesamurai"
+
+// Default is the default Mage target (runs when `mage` is invoked without a
+// target). It depends on Build via mg.Deps so plain `mage` builds the binary.
+func Default() {
+	mg.Deps(Build)
+}
 
 // Build compiles the timesamurai binary into the repo root.
 func Build() error {
-	return sh.RunV("go", "build", "-o", "timesamurai", "./cmd/timesamurai")
+	return sh.RunV("go", "build", "-o", binaryName, "./cmd/timesamurai")
 }
 
 // Run executes timesamurai via go run.
@@ -33,9 +47,25 @@ func Lint() error {
 	return sh.RunV("golangci-lint", "run", "./...")
 }
 
-// Install installs timesamurai into GOPATH/bin.
+// Install depends on Build, then copies the freshly built binary into
+// GOPATH/bin (defaults to ~/go/bin when GOPATH is unset).
 func Install() error {
-	return sh.RunV("go", "install", "./cmd/timesamurai")
+	mg.Deps(Build)
+
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve home: %w", err)
+		}
+		gopath = filepath.Join(home, "go")
+	}
+
+	bin := filepath.Join(gopath, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", bin, err)
+	}
+	return sh.RunV("cp", "-v", binaryName, filepath.Join(bin, binaryName))
 }
 
 // Vet runs go vet, then fails if gofmt -l or errcheck report issues.
@@ -62,7 +92,7 @@ func Completions() error {
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	path := filepath.Join("completions", "timesamurai.fish")
+	path := filepath.Join("completions", binaryName+".fish")
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
