@@ -44,6 +44,13 @@ func NewWorkCmd() *cobra.Command {
 		newReportCmd(),
 		newListCmd(),
 		newSearchCmd(),
+		// y61: correction verbs built on worktime.Modify/Delete/UndoLast plus
+		// x61's query machinery (list's address format, its buildFilter),
+		// so a mistaken entry can be fixed without hand-editing JSONL.
+		newModifyCmd(),
+		newDeleteCmd(),
+		newUndoCmd(),
+		newEditCmd(),
 	)
 	return cmd
 }

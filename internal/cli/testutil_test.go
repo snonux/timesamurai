@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/snonux/timesamurai/internal/worktime"
@@ -29,10 +30,21 @@ func newScratchStore(t *testing.T) string {
 // the returned error directly).
 func runWork(t *testing.T, storeDir string, args ...string) (string, error) {
 	t.Helper()
+	return runWorkWithStdin(t, storeDir, "", args...)
+}
+
+// runWorkWithStdin behaves like runWork but wires stdin to input, for
+// `work delete`'s multi-address confirmation prompt: it reads from
+// cmd.InOrStdin(), which defaults to os.Stdin, so tests must inject a fake
+// reader to answer (or deliberately not answer) that prompt without a real
+// terminal.
+func runWorkWithStdin(t *testing.T, storeDir, input string, args ...string) (string, error) {
+	t.Helper()
 	cmd := NewWorkCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
+	cmd.SetIn(strings.NewReader(input))
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs(append(args, "--store", storeDir))
