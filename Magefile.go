@@ -1,6 +1,6 @@
 //go:build mage
 
-// Timesamurai mage targets: build, run, test, vet, lint, install, completions.
+// Timesamurai mage targets: build, run, test, vet, lint, install, completions, logo.
 // Mirrors the Mage conventions used across other projects (e.g. hexai): a
 // binaryName constant used everywhere the built binary's name is referenced,
 // a Default target that depends on Build via mg.Deps, and Install building
