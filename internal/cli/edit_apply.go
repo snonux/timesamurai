@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/snonux/timesamurai/internal/config"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -21,7 +20,7 @@ import (
 // mutation, so a partial batch here is not a partial write -- exactly the
 // point of applying differences individually rather than as one opaque
 // batch op.
-func applyEditOps(ctx context.Context, store *worktime.Store, cfg config.AccountingConfig, host string, ops []editOp) ([]worktime.Entry, error) {
+func applyEditOps(ctx context.Context, store *worktime.Store, cfg worktime.AccountingConfig, host string, ops []editOp) ([]worktime.Entry, error) {
 	applied := make([]worktime.Entry, 0, len(ops))
 	for _, op := range ops {
 		entry, err := applyEditOp(ctx, store, cfg, host, op)
@@ -33,7 +32,7 @@ func applyEditOps(ctx context.Context, store *worktime.Store, cfg config.Account
 	return applied, nil
 }
 
-func applyEditOp(ctx context.Context, store *worktime.Store, cfg config.AccountingConfig, host string, op editOp) (worktime.Entry, error) {
+func applyEditOp(ctx context.Context, store *worktime.Store, cfg worktime.AccountingConfig, host string, op editOp) (worktime.Entry, error) {
 	switch op.Kind {
 	case editOpDelete:
 		return worktime.Delete(ctx, store, op.Address, host)
@@ -50,7 +49,7 @@ func applyEditOp(ctx context.Context, store *worktime.Store, cfg config.Accounti
 // primitive matching its action: Start/Stop for login/logout (which also
 // re-checks the login/logout state machine an edited-in session must still
 // obey), Add/Sub for a credit or withdrawal depending on value's sign.
-func insertEditLine(ctx context.Context, store *worktime.Store, cfg config.AccountingConfig, host string, line editLine) (worktime.Entry, error) {
+func insertEditLine(ctx context.Context, store *worktime.Store, cfg worktime.AccountingConfig, host string, line editLine) (worktime.Entry, error) {
 	at := time.Unix(line.Epoch, 0)
 	switch strings.ToLower(strings.TrimSpace(line.Action)) {
 	case "login":
@@ -67,7 +66,7 @@ func insertEditLine(ctx context.Context, store *worktime.Store, cfg config.Accou
 // insertAddLine handles a new "add" line: worktime.Add/Sub both require a
 // strictly positive duration and pick the sign themselves, so value's sign
 // here selects which of the two to call.
-func insertAddLine(ctx context.Context, store *worktime.Store, cfg config.AccountingConfig, host string, at time.Time, line editLine) (worktime.Entry, error) {
+func insertAddLine(ctx context.Context, store *worktime.Store, cfg worktime.AccountingConfig, host string, at time.Time, line editLine) (worktime.Entry, error) {
 	if line.Value == 0 {
 		return worktime.Entry{}, errors.New("a new add entry needs a nonzero value")
 	}

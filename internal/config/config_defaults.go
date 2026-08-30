@@ -1,6 +1,10 @@
 package config
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/snonux/timesamurai/internal/worktime"
+)
 
 const (
 	configDirName           = "timesamurai"
@@ -33,7 +37,7 @@ func Default() Config {
 			StoreDir: defaultWorktimeStoreDir,
 			DBDir:    defaultWorktimeDBDir,
 		},
-		Accounting: AccountingConfig{
+		Accounting: worktime.AccountingConfig{
 			WeekWorkHours: defaultWeekWorkHours,
 			PlusFor:       slices.Clone(defaultPlusFor),
 			MinusFor:      slices.Clone(defaultMinusFor),

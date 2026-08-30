@@ -1,12 +1,22 @@
 // Package config loads sectioned TOML settings for timesamurai.
 package config
 
-import "io"
+import (
+	"io"
+
+	"github.com/snonux/timesamurai/internal/worktime"
+)
 
 // Config holds runtime settings loaded from defaults, config.toml, and env.
 type Config struct {
-	Storage    StorageConfig
-	Accounting AccountingConfig
+	Storage StorageConfig
+	// Accounting is worktime.AccountingConfig, not a config-local type: the
+	// domain package (worktime) owns the shape of accounting settings since
+	// it is the package that interprets them (tag classification, session
+	// bookkeeping, report building). config's job here is only to load TOML
+	// into that shape and validate it -- the dependency runs config →
+	// worktime, never the reverse (task i81).
+	Accounting worktime.AccountingConfig
 	General    GeneralConfig
 	Report     ReportConfig
 }
@@ -15,15 +25,6 @@ type Config struct {
 type StorageConfig struct {
 	StoreDir string
 	DBDir    string
-}
-
-// AccountingConfig drives weekly targets and tag categories for the report.
-type AccountingConfig struct {
-	WeekWorkHours float64
-	PlusFor       []string
-	MinusFor      []string
-	BufferFor     []string
-	WeekendDays   []string
 }
 
 // GeneralConfig holds host identity and auto-login behaviour.

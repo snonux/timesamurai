@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/snonux/timesamurai/internal/config"
 	"github.com/snonux/timesamurai/internal/timefmt"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
@@ -25,7 +24,7 @@ import (
 const dayOffHours = 8
 
 // creditAction is the shape shared by worktime.Add and worktime.Sub.
-type creditAction func(ctx context.Context, store *worktime.Store, cfg config.AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (worktime.Entry, error)
+type creditAction func(ctx context.Context, store *worktime.Store, cfg worktime.AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (worktime.Entry, error)
 
 func newAddCmd() *cobra.Command {
 	var at, descr string

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/snonux/timesamurai/internal/config"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -26,7 +25,25 @@ func TestBlackbox_PublicAPICanRecordAndReport(t *testing.T) {
 		t.Fatalf("worktime.Open: %v", err)
 	}
 
-	cfg := config.Default().Accounting
+	// Same values internal/config.Default() ships as its Accounting section
+	// defaults, spelled out here rather than imported: this test's whole
+	// point is that worktime's public API is self-sufficient, so pulling in
+	// internal/config just to build a cfg value would undercut it.
+	cfg := worktime.AccountingConfig{
+		WeekWorkHours: 40.0,
+		PlusFor:       []string{"off", "bank", "bufferuse", "sick"},
+		MinusFor:      []string{"lunch"},
+		BufferFor: []string{
+			"tools",
+			"pet",
+			"selfdevelopment",
+			"workrebalance",
+			"compensate",
+			"travel",
+			"rebalance",
+		},
+		WeekendDays: []string{"Sat", "Sun"},
+	}
 	host := "host-a"
 	at := time.Date(2026, 1, 5, 9, 0, 0, 0, time.Local)
 

@@ -3,6 +3,8 @@ package config
 import (
 	"slices"
 	"strings"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 func (c *Config) mergeWith(other *overlay) {
@@ -24,7 +26,7 @@ func mergeStorage(dst *StorageConfig, src storageOverlay) {
 	}
 }
 
-func mergeAccounting(dst *AccountingConfig, src accountingOverlay) {
+func mergeAccounting(dst *worktime.AccountingConfig, src accountingOverlay) {
 	if src.WeekWorkHours != nil {
 		dst.WeekWorkHours = *src.WeekWorkHours
 	}

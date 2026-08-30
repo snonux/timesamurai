@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
 // bufferSourceTag is the buffer category UseBuffer withdraws from. The CLI
@@ -86,7 +84,7 @@ type EntryPatch struct {
 // on host at "at" (time.Now() when zero). It fails if that category already
 // has an open login anywhere in the store, since a person cannot be doing
 // the same thing on two machines' clocks at once.
-func Start(ctx context.Context, store *Store, cfg config.AccountingConfig, host string, tags []string, at time.Time, descr string) (Entry, error) {
+func Start(ctx context.Context, store *Store, cfg AccountingConfig, host string, tags []string, at time.Time, descr string) (Entry, error) {
 	category, err := sessionKey(cfg, tags)
 	if err != nil {
 		return Entry{}, err
@@ -107,7 +105,7 @@ func Start(ctx context.Context, store *Store, cfg config.AccountingConfig, host 
 // a logout entry on host at "at". The logout is recorded on host regardless
 // of which host holds the open login: it is just a timestamp marker, not a
 // reference to the login entry it closes.
-func Stop(ctx context.Context, store *Store, cfg config.AccountingConfig, host string, tags []string, at time.Time, descr string) (Entry, error) {
+func Stop(ctx context.Context, store *Store, cfg AccountingConfig, host string, tags []string, at time.Time, descr string) (Entry, error) {
 	category, err := sessionKey(cfg, tags)
 	if err != nil {
 		return Entry{}, err
@@ -125,7 +123,7 @@ func Stop(ctx context.Context, store *Store, cfg config.AccountingConfig, host s
 }
 
 // Add records a positive duration against tags (default WorkTag) on host.
-func Add(ctx context.Context, store *Store, cfg config.AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (Entry, error) {
+func Add(ctx context.Context, store *Store, cfg AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (Entry, error) {
 	if duration <= 0 {
 		return Entry{}, errors.New("duration must be positive")
 	}
@@ -133,7 +131,7 @@ func Add(ctx context.Context, store *Store, cfg config.AccountingConfig, host st
 }
 
 // Sub records a negative duration (a withdrawal) against tags on host.
-func Sub(ctx context.Context, store *Store, cfg config.AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (Entry, error) {
+func Sub(ctx context.Context, store *Store, cfg AccountingConfig, host string, tags []string, duration time.Duration, at time.Time, descr string) (Entry, error) {
 	if duration <= 0 {
 		return Entry{}, errors.New("duration must be positive")
 	}
@@ -148,7 +146,7 @@ func Sub(ctx context.Context, store *Store, cfg config.AccountingConfig, host st
 // there is no cross-file transaction over two independent JSONL appends).
 // The returned error says so explicitly so a caller can tell the difference
 // between "nothing happened" and "half of it happened".
-func UseBuffer(ctx context.Context, store *Store, cfg config.AccountingConfig, host string, duration time.Duration, at time.Time, descr string) ([]Entry, error) {
+func UseBuffer(ctx context.Context, store *Store, cfg AccountingConfig, host string, duration time.Duration, at time.Time, descr string) ([]Entry, error) {
 	if duration <= 0 {
 		return nil, errors.New("duration must be positive")
 	}
@@ -167,7 +165,7 @@ func UseBuffer(ctx context.Context, store *Store, cfg config.AccountingConfig, h
 
 // Modify applies patch to the entry at addr (resolved against currentHost)
 // and records a modify undo record carrying the before/after snapshots.
-func Modify(ctx context.Context, store *Store, cfg config.AccountingConfig, addr, currentHost string, patch EntryPatch) (Entry, error) {
+func Modify(ctx context.Context, store *Store, cfg AccountingConfig, addr, currentHost string, patch EntryPatch) (Entry, error) {
 	host, id, err := ParseAddress(addr, currentHost)
 	if err != nil {
 		return Entry{}, err
@@ -282,7 +280,7 @@ func (p EntryPatch) apply(entry Entry) Entry {
 // rather than trying to roll back the append, since undoing a second,
 // independent file write on top of a first failure risks leaving worse
 // partial state than it fixes.
-func insertEntry(ctx context.Context, store entryWriter, cfg config.AccountingConfig, host, action string, tags []string, epoch, value int64, descr string) (Entry, error) {
+func insertEntry(ctx context.Context, store entryWriter, cfg AccountingConfig, host, action string, tags []string, epoch, value int64, descr string) (Entry, error) {
 	id, err := store.NextID(host)
 	if err != nil {
 		return Entry{}, err
@@ -349,7 +347,7 @@ func replaceOne(ctx context.Context, store entryWriter, host string, id int64, r
 // session. A tag set with no work/plus/minus/buffer tag (only labels, or
 // none at all) falls back to WorkTag, matching the historical default of an
 // unset category meaning "work".
-func sessionKey(cfg config.AccountingConfig, tags []string) (string, error) {
+func sessionKey(cfg AccountingConfig, tags []string) (string, error) {
 	tag, err := AccountingTag(cfg, tags)
 	if err != nil {
 		return "", err
@@ -382,7 +380,7 @@ type OpenSession struct {
 // skipped rather than aborting the whole replay. The result is sorted by
 // category so repeated calls (and `status` output) are stable rather than
 // following Go's randomized map iteration order.
-func OpenSessions(store entryReader, cfg config.AccountingConfig) []OpenSession {
+func OpenSessions(store entryReader, cfg AccountingConfig) []OpenSession {
 	open := make(map[string]OpenSession)
 	for _, e := range allEntriesSorted(store) {
 		category, err := sessionKey(cfg, e.Tags)
@@ -420,7 +418,7 @@ func sortedSessions(open map[string]OpenSession) []OpenSession {
 // in the store, and on which host, by delegating to OpenSessions and
 // filtering for category. Start uses this to refuse a second login for a
 // category that is already open; Stop uses it to find the host to close.
-func openSessionHost(store entryReader, cfg config.AccountingConfig, category string) (string, bool, error) {
+func openSessionHost(store entryReader, cfg AccountingConfig, category string) (string, bool, error) {
 	for _, s := range OpenSessions(store, cfg) {
 		if s.Category == category {
 			return s.Host, true, nil

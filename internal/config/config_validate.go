@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/snonux/timesamurai/internal/worktime"
 )
 
 var validWeekendDays = map[string]struct{}{
@@ -31,7 +33,7 @@ func validateStorage(s StorageConfig) error {
 	return nil
 }
 
-func validateAccounting(a AccountingConfig) error {
+func validateAccounting(a worktime.AccountingConfig) error {
 	if math.IsNaN(a.WeekWorkHours) || math.IsInf(a.WeekWorkHours, 0) {
 		return fmt.Errorf("config: accounting.week_work_hours must be a finite number, got %v", a.WeekWorkHours)
 	}

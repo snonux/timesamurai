@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
 // This file is the JSONL-era home for what the pre-rewrite package's
@@ -29,7 +27,7 @@ import (
 // self-consistent new one.
 func TestIntegration_StartStopAddThroughStoreToReport(t *testing.T) {
 	store, ctx := openStore(t)
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	host := "fixture-host"
 
 	day1Login := time.Date(2026, 1, 5, 9, 0, 0, 0, time.Local)

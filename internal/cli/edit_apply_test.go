@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/snonux/timesamurai/internal/config"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -21,7 +20,7 @@ func TestApplyEditOpsModifyDeleteInsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worktime.Open: %v", err)
 	}
-	cfg := config.AccountingConfig{}
+	cfg := worktime.AccountingConfig{}
 	host := "earth"
 
 	keep, err := worktime.Add(ctx, store, cfg, host, []string{"work"}, time.Hour, time.Unix(1000, 0), "keep, modified")

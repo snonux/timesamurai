@@ -5,12 +5,30 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
-func testAccountingConfig() config.AccountingConfig {
-	return config.Default().Accounting
+// testAccountingConfig returns the same values internal/config.Default()
+// ships as its Accounting section defaults. It is duplicated here rather
+// than imported from internal/config: worktime must be testable without
+// depending on config at all (task i81 -- config depends on worktime, not
+// the reverse), and this is the one place in the test suite that needs a
+// populated AccountingConfig rather than a bespoke one per test.
+func testAccountingConfig() AccountingConfig {
+	return AccountingConfig{
+		WeekWorkHours: 40.0,
+		PlusFor:       []string{"off", "bank", "bufferuse", "sick"},
+		MinusFor:      []string{"lunch"},
+		BufferFor: []string{
+			"tools",
+			"pet",
+			"selfdevelopment",
+			"workrebalance",
+			"compensate",
+			"travel",
+			"rebalance",
+		},
+		WeekendDays: []string{"Sat", "Sun"},
+	}
 }
 
 func TestClassifyTag(t *testing.T) {

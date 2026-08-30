@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
 const (
@@ -27,6 +25,27 @@ const (
 
 // ErrMultipleAccountingTags indicates more than one report accounting tag on an entry.
 var ErrMultipleAccountingTags = errors.New("multiple accounting tags")
+
+// AccountingConfig drives weekly targets and tag categories for the report
+// and for tag classification/validation (ClassifyTag, AccountingTag,
+// ValidateTags, ValidateEntry below) and session bookkeeping (entries.go).
+//
+// It lives here, in the domain package, rather than in internal/config
+// (where it used to live): worktime is the package that actually interprets
+// these fields — it defines what "plus/minus/buffer" mean for a tag and how
+// they combine into a report — so it is the natural owner of their shape.
+// internal/config's job is only to load TOML into this type and validate it;
+// putting the type in config made the domain model's compilability depend on
+// config's TOML-loading code, which is backwards (config → worktime is the
+// right direction, not worktime → config, per task i81). internal/config now
+// imports this package and maps parsed TOML fields onto AccountingConfig.
+type AccountingConfig struct {
+	WeekWorkHours float64
+	PlusFor       []string
+	MinusFor      []string
+	BufferFor     []string
+	WeekendDays   []string
+}
 
 // Entry is one JSONL work-time event for a host.
 // JSON field order matches the on-disk plan examples for stable diffs:
@@ -53,7 +72,7 @@ const (
 )
 
 // ClassifyTag maps tag against cfg accounting lists and WorkTag.
-func ClassifyTag(cfg config.AccountingConfig, tag string) TagClass {
+func ClassifyTag(cfg AccountingConfig, tag string) TagClass {
 	normalized := strings.TrimSpace(tag)
 	if normalized == "" {
 		return TagClassLabel
@@ -79,7 +98,7 @@ func ClassifyTag(cfg config.AccountingConfig, tag string) TagClass {
 // those lists are rejected. When no primary tag is present, the first buffer
 // tag accounts. Additional buffer tags are labels once a primary tag exists,
 // but a second buffer tag is rejected when buffer alone would account.
-func AccountingTag(cfg config.AccountingConfig, tags []string) (string, error) {
+func AccountingTag(cfg AccountingConfig, tags []string) (string, error) {
 	normalized, err := normalizeTags(tags)
 	if err != nil {
 		return "", err
@@ -112,7 +131,7 @@ func AccountingTag(cfg config.AccountingConfig, tags []string) (string, error) {
 }
 
 // ValidateTags ensures tags obey the single accounting-tag rule.
-func ValidateTags(cfg config.AccountingConfig, tags []string) error {
+func ValidateTags(cfg AccountingConfig, tags []string) error {
 	_, err := AccountingTag(cfg, tags)
 	return err
 }
@@ -135,7 +154,7 @@ func IsValidAction(action string) bool {
 }
 
 // ValidateEntry checks required fields and tag accounting rules.
-func ValidateEntry(cfg config.AccountingConfig, entry Entry) error {
+func ValidateEntry(cfg AccountingConfig, entry Entry) error {
 	if entry.ID <= 0 {
 		return errors.New("entry id must be positive")
 	}

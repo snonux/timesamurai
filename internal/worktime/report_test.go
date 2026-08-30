@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
 // These are fast, synthetic, in-memory tests for the individual worktime.rb
@@ -24,7 +22,7 @@ func mkEntry(id int64, action string, epoch int64, value int64, tags ...string) 
 	return Entry{ID: id, Action: action, Epoch: epoch, Host: "h1", Value: value, Tags: tags}
 }
 
-func buildAndFormat(t *testing.T, cfg config.AccountingConfig, entries []Entry) ([]WeekReport, string) {
+func buildAndFormat(t *testing.T, cfg AccountingConfig, entries []Entry) ([]WeekReport, string) {
 	t.Helper()
 	// io.Discard: none of these tests care about the superseded-login
 	// warning (that has its own dedicated test below), so nothing should
@@ -56,7 +54,7 @@ func TestWeekKeyIgnoresYear(t *testing.T) {
 }
 
 func TestWorkAlwaysPrintsEvenWhenAbsent(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day := epochAt(2024, 1, 3, 12, 0, 0) // Wednesday, no work entries at all
 	// Deliberately NOT "lunch" (a minusfor category): print_day's
 	// `day['values']['work'] -= day['values']['lunch']` would crash real
@@ -75,7 +73,7 @@ func TestWorkAlwaysPrintsEvenWhenAbsent(t *testing.T) {
 }
 
 func TestZeroValueSuppressedExceptWork(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day := epochAt(2024, 1, 3, 12, 0, 0)
 	entries := []Entry{
 		mkEntry(1, ActionAdd, day, 3600, WorkTag),
@@ -89,7 +87,7 @@ func TestZeroValueSuppressedExceptWork(t *testing.T) {
 }
 
 func TestPrintOrderIsFixedRegardlessOfInsertionOrder(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day := epochAt(2024, 1, 3, 12, 0, 0)
 	// Insert every category in reverse of the required print order.
 	entries := []Entry{
@@ -119,7 +117,7 @@ func TestPrintOrderIsFixedRegardlessOfInsertionOrder(t *testing.T) {
 }
 
 func TestDayMarker(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	entries := []Entry{
 		mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), int64(2*secondsPerHour), "off"),   // Tue, off<8h
 		mkEntry(2, ActionAdd, epochAt(2024, 1, 3, 9, 0, 0), eightHours, "off"),                // Wed, off==8h
@@ -140,7 +138,7 @@ func TestDayMarker(t *testing.T) {
 }
 
 func TestMinusForSubtractionIsNotDoubled(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day1 := epochAt(2024, 1, 2, 9, 0, 0) // Tue
 	day2 := epochAt(2024, 1, 3, 9, 0, 0) // Wed
 
@@ -171,7 +169,7 @@ func TestMinusForSubtractionIsNotDoubled(t *testing.T) {
 }
 
 func TestPlusForReducesWeeklyTargetAndBalanceAccumulates(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	week1Day := epochAt(2024, 1, 2, 9, 0, 0) // ISO week 1
 	week2Day := epochAt(2024, 1, 9, 9, 0, 0) // ISO week 2
 
@@ -200,7 +198,7 @@ func TestPlusForReducesWeeklyTargetAndBalanceAccumulates(t *testing.T) {
 }
 
 func TestBufferExcludesLoginLogoutDurations(t *testing.T) {
-	cfg := config.Default().Accounting // bufferfor includes "pet"
+	cfg := testAccountingConfig() // bufferfor includes "pet"
 	day := epochAt(2024, 1, 2, 9, 0, 0)
 
 	entries := []Entry{
@@ -222,7 +220,7 @@ func TestBufferExcludesLoginLogoutDurations(t *testing.T) {
 }
 
 func TestLoginOverwriteSilentlyDiscardsPreviousOpenLogin(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day := epochAt(2024, 1, 2, 9, 0, 0)
 	t0, t1, t2 := day, day+2*secondsPerHour, day+3*secondsPerHour
 
@@ -268,7 +266,7 @@ func TestLoginOverwriteSilentlyDiscardsPreviousOpenLogin(t *testing.T) {
 // applyAction's comment for how a same-host reading of the raw earth file
 // alone would misidentify a later earth-only login as the superseder.
 func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	const (
 		discardedHost    = "earth"
 		discardedEpoch   = int64(1781618168)
@@ -299,7 +297,7 @@ func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
 }
 
 func TestLogoutWithoutLoginErrors(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, ActionLogout, epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
 
 	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
@@ -308,7 +306,7 @@ func TestLogoutWithoutLoginErrors(t *testing.T) {
 }
 
 func TestThreeTrailingNewlinesPerWeekBlock(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
 
 	_, out := buildAndFormat(t, cfg, entries)
@@ -321,7 +319,7 @@ func TestThreeTrailingNewlinesPerWeekBlock(t *testing.T) {
 }
 
 func TestBufferAlwaysPrintedOnWeekLineEvenWhenZero(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
 
 	_, out := buildAndFormat(t, cfg, entries)
@@ -331,7 +329,7 @@ func TestBufferAlwaysPrintedOnWeekLineEvenWhenZero(t *testing.T) {
 }
 
 func TestCustomTagIsNotFoldedIntoWork(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	day := epochAt(2024, 1, 2, 9, 0, 0)
 	// "bulgarian" mirrors a real one-off tag from the live data: not
 	// "work", not in any plusfor/minusfor/bufferfor list.
@@ -356,7 +354,7 @@ func TestBuildReport_EmptyInputReturnsNoWeeksOrError(t *testing.T) {
 	// empty entries list (Time.at(nil) on the placeholder day/week it always
 	// flushes once), so an empty store deliberately isn't a byte-for-byte
 	// case — it's just the sane behavior for "nothing recorded yet".
-	weeks, err := BuildReport(nil, config.Default().Accounting, io.Discard)
+	weeks, err := BuildReport(nil, testAccountingConfig(), io.Discard)
 	if err != nil {
 		t.Fatalf("BuildReport(nil): %v", err)
 	}
@@ -366,7 +364,7 @@ func TestBuildReport_EmptyInputReturnsNoWeeksOrError(t *testing.T) {
 }
 
 func TestBuildReport_RejectsUnknownAction(t *testing.T) {
-	cfg := config.Default().Accounting
+	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, "mystery", epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
 
 	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {

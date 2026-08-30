@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/snonux/timesamurai/internal/config"
 )
 
 // This file reproduces worktime.rb's `report`/`print_week`/`print_day`/
@@ -131,7 +129,7 @@ func OpenLoginsBefore(entries []Entry, before time.Time) []BoundaryLogin {
 // the day/week currently being accumulated, open logins, and the two
 // running totals (balance, buffer) that persist across week boundaries.
 type reportState struct {
-	cfg   config.AccountingConfig
+	cfg   AccountingConfig
 	warn  io.Writer            // destination for the superseded-login warning
 	login map[string]openLogin // category -> its still-open login
 
@@ -161,7 +159,7 @@ type weekAccumulator struct {
 // warn receives the superseded-login diagnostic (see applyAction); a nil
 // warn is replaced with io.Discard so callers that don't care about the
 // warning (e.g. most tests) don't have to pass one.
-func newReportState(cfg config.AccountingConfig, warn io.Writer) *reportState {
+func newReportState(cfg AccountingConfig, warn io.Writer) *reportState {
 	if warn == nil {
 		warn = io.Discard
 	}
@@ -189,7 +187,7 @@ func newReportState(cfg config.AccountingConfig, warn io.Writer) *reportState {
 // This is purely a diagnostic side channel: it never changes the returned
 // []WeekReport, so passing a different warn writer cannot change what gets
 // reported.
-func BuildReport(entries []Entry, cfg config.AccountingConfig, warn io.Writer) ([]WeekReport, error) {
+func BuildReport(entries []Entry, cfg AccountingConfig, warn io.Writer) ([]WeekReport, error) {
 	if len(entries) == 0 {
 		// Ruby would crash here (Time.at(nil) on the placeholder day/week
 		// that report() always flushes once) — an empty store is not a
