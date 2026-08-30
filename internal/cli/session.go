@@ -35,6 +35,7 @@ func newSessionCmd(use, short string, hidden bool, verb string, action sessionAc
 		},
 	}
 	addAtDescrFlags(cmd, &at, &descr)
+	registerHostFlag(cmd)
 	return cmd
 }
 

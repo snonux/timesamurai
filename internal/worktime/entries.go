@@ -183,7 +183,7 @@ func Modify(ctx context.Context, store *Store, cfg AccountingConfig, addr, curre
 	if err := replaceOne(ctx, store, host, id, &after); err != nil {
 		return Entry{}, err
 	}
-	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpModify, ID: id, Before: &before, After: &after}); err != nil {
+	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpModify, ID: id, By: currentHost, Before: &before, After: &after}); err != nil {
 		return after, fmt.Errorf("entry %s modified but undo record failed: %w", addr, err)
 	}
 	return after, nil
@@ -205,7 +205,7 @@ func Delete(ctx context.Context, store *Store, addr, currentHost string) (Entry,
 	if err := replaceOne(ctx, store, host, id, nil); err != nil {
 		return Entry{}, err
 	}
-	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpDelete, ID: id, Before: &before, After: nil}); err != nil {
+	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpDelete, ID: id, By: currentHost, Before: &before, After: nil}); err != nil {
 		return before, fmt.Errorf("entry %s deleted but undo record failed: %w", addr, err)
 	}
 	return before, nil
@@ -302,18 +302,30 @@ func insertEntry(ctx context.Context, store entryWriter, cfg AccountingConfig, h
 	if err := store.Append(ctx, entry); err != nil {
 		return Entry{}, err
 	}
-	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpInsert, ID: entry.ID, After: &entry}); err != nil {
+	if err := store.AppendUndo(ctx, host, UndoRecord{Op: OpInsert, ID: entry.ID, By: host, After: &entry}); err != nil {
 		return entry, fmt.Errorf("entry %d written but undo record failed: %w", entry.ID, err)
 	}
 	return entry, nil
 }
 
 // findEntry looks up id within host's entries.
+//
+// When host has no entries at all the error says so explicitly. A bare id
+// resolves against the current machine, so on a host that has never tracked
+// anything -- or whose data lives under a different name -- every lookup
+// fails with a plain "not found" that gives no hint the address was resolved
+// somewhere unexpected. Naming the empty host points at the real fix, which
+// is to qualify the address.
 func findEntry(store entryReader, host string, id int64) (Entry, error) {
-	for _, e := range store.Entries(host) {
+	entries := store.Entries(host)
+	for _, e := range entries {
 		if e.ID == id {
 			return e, nil
 		}
+	}
+	if len(entries) == 0 {
+		return Entry{}, fmt.Errorf("%w: %s:%d (host %q has no entries; qualify the address as <host>:<id>)",
+			ErrEntryNotFound, host, id, host)
 	}
 	return Entry{}, fmt.Errorf("%w: %s:%d", ErrEntryNotFound, host, id)
 }

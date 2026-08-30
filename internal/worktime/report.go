@@ -315,14 +315,38 @@ func (s *reportState) applyAction(entry Entry, category string) error {
 	case ActionLogout:
 		open, ok := s.login[category]
 		if !ok {
-			return fmt.Errorf("logout without login for %q at epoch %d", category, entry.Epoch)
+			// Skip rather than abort. worktime.rb dies here, but a report
+			// that refuses to render at all is worse than one that renders
+			// and says what it could not pair -- and this state is now
+			// reachable by ordinary use: deleting the login half of a pair
+			// leaves exactly this lone logout behind, which would otherwise
+			// make every subsequent report unusable until someone guessed
+			// that `work undo` was the fix. No time is credited for an
+			// interval whose start is unknown.
+			s.warnUnpairable(entry, "logout without a matching login")
+			return nil
 		}
 		s.day.values[category] += entry.Epoch - open.Epoch
 		delete(s.login, category)
 	default:
-		return fmt.Errorf("unknown action %q at epoch %d", entry.Action, entry.Epoch)
+		// Same reasoning: an entry carrying an action this version does not
+		// understand is skipped and named, not fatal. It costs one line of
+		// output and keeps every other week readable.
+		s.warnUnpairable(entry, fmt.Sprintf("unknown action %q", entry.Action))
+		return nil
 	}
 	return nil
+}
+
+// warnUnpairable reports one entry that report() cannot fold into a total,
+// naming the address so it can be inspected with `work list` or reverted
+// with `work undo`.
+func (s *reportState) warnUnpairable(entry Entry, why string) {
+	if s.warn == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(s.warn, "warning: skipped %s:%d (%s) at epoch %d\n",
+		entry.Host, entry.ID, why, entry.Epoch)
 }
 
 // warnDiscardedLogin writes one diagnostic line to s.warn when entry (a new

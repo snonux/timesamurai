@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -29,10 +31,19 @@ var ErrNoUndo = errors.New("no undo record")
 //
 // Field order matches the plan examples: ts, op, id, before, after.
 // before is null for insert; after is null for delete.
+//
+// By names the host that PERFORMED the operation, which is not always the
+// host whose log the record lives in: entries are addressed <host>:<id>, so
+// this machine can modify another machine's data, and that record lands in
+// the other host's log. Without By, "undo my last change" could not find it
+// again. Omitted (and empty on read) for records written before this field
+// existed, which UndoLastByActor treats as authored by their own data host --
+// the only assumption available, and the behavior those records had anyway.
 type UndoRecord struct {
 	TS     int64  `json:"ts"`
 	Op     string `json:"op"`
 	ID     int64  `json:"id"`
+	By     string `json:"by,omitempty"`
 	Before *Entry `json:"before"`
 	After  *Entry `json:"after"`
 }
@@ -393,4 +404,78 @@ func rewriteUndoFile(path string, records []UndoRecord) error {
 		return fmt.Errorf("rename %q -> %q: %w", tmp, path, err)
 	}
 	return nil
+}
+
+// UndoLastByActor reverts the most recent operation performed BY actor,
+// searching every host's undo log rather than only actor's own.
+//
+// Entries are addressed <host>:<id>, so this machine can modify or delete
+// another machine's data; that record lands in the other host's log. Undoing
+// only the current host's log therefore left cross-host changes unrevertable
+// -- you could delete another host's entry with no way back. Records written
+// before UndoRecord.By existed carry no actor, and are attributed to their
+// own data host, which is exactly the behavior they had before.
+//
+// Ties on TS are broken by host name so the choice is deterministic.
+func (s *Store) UndoLastByActor(ctx context.Context, actor string) (UndoRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return UndoRecord{}, err
+	}
+	actor, err := NormalizeHost(actor)
+	if err != nil {
+		return UndoRecord{}, err
+	}
+
+	target, found := "", UndoRecord{}
+	for _, host := range s.undoLogHosts() {
+		records, err := readUndoRecords(filepath.Join(s.dir, undoFileName(host)))
+		if err != nil {
+			return UndoRecord{}, err
+		}
+		idx := lastActionableUndoIndex(records)
+		if idx < 0 {
+			continue
+		}
+		rec := records[idx]
+		if undoRecordActor(rec, host) != actor {
+			continue
+		}
+		if target == "" || rec.TS > found.TS || (rec.TS == found.TS && host < target) {
+			target, found = host, rec
+		}
+	}
+
+	if target == "" {
+		return UndoRecord{}, ErrNoUndo
+	}
+	return s.UndoLast(ctx, target)
+}
+
+// undoRecordActor reports which host performed rec, falling back to the log's
+// own host for records predating UndoRecord.By.
+func undoRecordActor(rec UndoRecord, logHost string) string {
+	if rec.By != "" {
+		return rec.By
+	}
+	return logHost
+}
+
+// undoLogHosts lists every host with an undo log on disk. It reads the
+// directory rather than Store.Hosts() because a host can have an undo log
+// with no entries left (everything deleted), and that log is still undoable.
+func (s *Store) undoLogHosts() []string {
+	matches, err := filepath.Glob(filepath.Join(s.dir, undoFileName("*")))
+	if err != nil {
+		return nil
+	}
+	hosts := make([]string, 0, len(matches))
+	for _, path := range matches {
+		name := filepath.Base(path)
+		host := strings.TrimSuffix(strings.TrimPrefix(name, "undo."), ".jsonl")
+		if host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	sort.Strings(hosts)
+	return hosts
 }

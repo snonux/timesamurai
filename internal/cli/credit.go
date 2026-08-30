@@ -37,6 +37,7 @@ func newAddCmd() *cobra.Command {
 		},
 	}
 	addAtDescrFlags(cmd, &at, &descr)
+	registerHostFlag(cmd)
 	return cmd
 }
 
@@ -51,6 +52,7 @@ func newSubCmd() *cobra.Command {
 		},
 	}
 	addAtDescrFlags(cmd, &at, &descr)
+	registerHostFlag(cmd)
 	return cmd
 }
 
@@ -95,6 +97,7 @@ func newUseBufferCmd() *cobra.Command {
 		},
 	}
 	addAtDescrFlags(cmd, &at, &descr)
+	registerHostFlag(cmd)
 	return cmd
 }
 
@@ -137,6 +140,7 @@ func newDayOffCmd() *cobra.Command {
 		},
 	}
 	addAtDescrFlags(cmd, &at, &descr)
+	registerHostFlag(cmd)
 	return cmd
 }
 

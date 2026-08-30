@@ -1,6 +1,7 @@
 package worktime
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -296,12 +297,31 @@ func TestLoginOverwriteWarnsAgainstRealCase(t *testing.T) {
 	}
 }
 
-func TestLogoutWithoutLoginErrors(t *testing.T) {
+// TestLogoutWithoutLoginSkipsAndWarns pins the deliberate divergence from
+// worktime.rb, which aborts here. Deleting the login half of a pair leaves
+// exactly this lone logout, so aborting would make every later report
+// unusable until the user guessed that `work undo` was the fix. The entry is
+// skipped, named on the warning stream, and credits no time -- an interval
+// whose start is unknown has no duration.
+func TestLogoutWithoutLoginSkipsAndWarns(t *testing.T) {
 	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, ActionLogout, epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
 
-	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
-		t.Fatal("expected an error for logout without a matching login")
+	var warn bytes.Buffer
+	weeks, err := BuildReport(entries, cfg, &warn)
+	if err != nil {
+		t.Fatalf("BuildReport() = %v, want a skip rather than an error", err)
+	}
+
+	for _, want := range []string{"skipped", "logout without a matching login"} {
+		if !strings.Contains(warn.String(), want) {
+			t.Errorf("warning %q missing %q", warn.String(), want)
+		}
+	}
+	for _, week := range weeks {
+		if got := week.Values[WorkTag]; got != 0 {
+			t.Errorf("unpairable logout credited %d seconds of work, want 0", got)
+		}
 	}
 }
 
@@ -363,12 +383,33 @@ func TestBuildReport_EmptyInputReturnsNoWeeksOrError(t *testing.T) {
 	}
 }
 
-func TestBuildReport_RejectsUnknownAction(t *testing.T) {
+// TestBuildReport_SkipsUnknownAction: an action this version does not
+// understand costs one warning line, not the whole report. Same reasoning as
+// TestLogoutWithoutLoginSkipsAndWarns -- one unreadable entry must not make
+// every other week unreadable too.
+func TestBuildReport_SkipsUnknownAction(t *testing.T) {
 	cfg := testAccountingConfig()
-	entries := []Entry{mkEntry(1, "mystery", epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
+	entries := []Entry{
+		mkEntry(1, "mystery", epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag),
+		mkEntry(2, ActionAdd, epochAt(2024, 1, 2, 10, 0, 0), secondsPerHour, WorkTag),
+	}
 
-	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
-		t.Fatal("BuildReport() accepted unknown action, want error")
+	var warn bytes.Buffer
+	weeks, err := BuildReport(entries, cfg, &warn)
+	if err != nil {
+		t.Fatalf("BuildReport() = %v, want a skip rather than an error", err)
+	}
+	if !strings.Contains(warn.String(), `unknown action "mystery"`) {
+		t.Errorf("warning %q does not name the unknown action", warn.String())
+	}
+
+	// The good entry beside it must still be counted.
+	var total int64
+	for _, week := range weeks {
+		total += week.Values[WorkTag]
+	}
+	if total != secondsPerHour {
+		t.Errorf("work total = %d, want %d: the valid entry was dropped too", total, secondsPerHour)
 	}
 }
 

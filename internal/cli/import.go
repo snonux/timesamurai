@@ -56,6 +56,7 @@ func newImportCmd() *cobra.Command {
 			return runImport(cmd, args[0])
 		},
 	}
+	registerHostFlag(cmd)
 	return cmd
 }
 

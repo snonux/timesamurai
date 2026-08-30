@@ -9,28 +9,41 @@ import (
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
-// newUndoCmd builds `work undo`, reverting the current host's most recent
-// insert/modify/delete via Store.UndoLast (task r61) and reporting what was
-// undone. There is no argument: undo always targets the current host's own
-// undo log, matching how every other mutating verb here writes under the
-// current host by default.
+// newUndoCmd builds `work undo`, reverting the most recent
+// insert/modify/delete this machine performed and reporting what was undone.
+//
+// Because entries are addressed <host>:<id>, a change made here can land in
+// another host's undo log, so a bare undo searches every log for the newest
+// record this machine authored rather than only its own. --host overrides
+// that to pop a specific host's log, which is how you revert something a
+// different machine did without having to go and use it.
 func newUndoCmd() *cobra.Command {
-	return &cobra.Command{
+	var host string
+	cmd := &cobra.Command{
 		Use:   "undo",
-		Short: "Revert the last insert/modify/delete on this host",
+		Short: "Revert the last insert/modify/delete made from this machine",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUndo(cmd)
+			return runUndo(cmd, host)
 		},
 	}
+	cmd.Flags().StringVar(&host, "host", "", "undo the last change in this host's log instead of the last one made from this machine")
+	registerFlagCompletion(cmd, "host", completeHosts)
+	return cmd
 }
 
-func runUndo(cmd *cobra.Command) error {
+func runUndo(cmd *cobra.Command, host string) error {
 	rt, err := newRuntime(cmd)
 	if err != nil {
 		return err
 	}
-	rec, err := rt.store.UndoLast(cmdContext(cmd), rt.host)
+
+	var rec worktime.UndoRecord
+	if host != "" {
+		rec, err = rt.store.UndoLast(cmdContext(cmd), host)
+	} else {
+		rec, err = rt.store.UndoLastByActor(cmdContext(cmd), rt.host)
+	}
 	if err != nil {
 		return err
 	}

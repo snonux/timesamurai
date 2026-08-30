@@ -51,6 +51,11 @@ func newRuntime(cmd *cobra.Command) (*runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if override, err := hostIdentityOverride(cmd); err != nil {
+		return nil, err
+	} else if override != "" {
+		host = override
+	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	return &runtime{cfg: cfg, store: store, host: host, verbose: verbose}, nil
@@ -120,4 +125,43 @@ func cmdContext(cmd *cobra.Command) context.Context {
 		return ctx
 	}
 	return context.Background()
+}
+
+// hostIdentityAnnotation marks a --host flag as redirecting where a mutation
+// is RECORDED, as opposed to list/search's --host, which only filters what is
+// displayed. Both flags are called --host because that reads correctly in
+// either sentence ("add it under the mac", "list the mac's entries"), so the
+// annotation, not the name, is what tells newRuntime which one it is looking
+// at. Without it, `work list --host mac` would silently re-identify the
+// machine as well as filter.
+const hostIdentityAnnotation = "timesamurai_host_identity"
+
+// registerHostFlag adds the identity --host flag to a mutating command.
+//
+// Entries are addressed <host>:<id> and every read verb already spans hosts,
+// but every write was pinned to the current machine -- so "I forgot to log
+// two hours on the laptop" had no answer short of going to the laptop. This
+// closes that asymmetry.
+func registerHostFlag(cmd *cobra.Command) {
+	cmd.Flags().String("host", "", "record under this host's database instead of the current machine's")
+	_ = cmd.Flags().SetAnnotation("host", hostIdentityAnnotation, []string{"true"})
+	registerFlagCompletion(cmd, "host", completeHosts)
+}
+
+// hostIdentityOverride returns the normalized --host value when the command
+// registered one as an identity override, or "" when it did not.
+func hostIdentityOverride(cmd *cobra.Command) (string, error) {
+	flag := cmd.Flags().Lookup("host")
+	if flag == nil || flag.Annotations[hostIdentityAnnotation] == nil {
+		return "", nil
+	}
+	value := strings.TrimSpace(flag.Value.String())
+	if value == "" {
+		return "", nil
+	}
+	host, err := worktime.NormalizeHost(value)
+	if err != nil {
+		return "", fmt.Errorf("--host: %w", err)
+	}
+	return host, nil
 }
