@@ -66,6 +66,67 @@ type openLogin struct {
 	Host  string
 }
 
+// BoundaryLogin identifies one category with a login still open immediately
+// before a report range's Since boundary — i.e. a session that started
+// before the range but hadn't been logged out yet at that instant. Category
+// is the accounting category (entryCategory); Host is the host that
+// recorded the open login, carried through only so a synthetic continuation
+// entry attributes to somewhere real, the way a genuine login would.
+type BoundaryLogin struct {
+	Category string
+	Host     string
+}
+
+// OpenLoginsBefore replays entries strictly before `before` (mirroring
+// applyAction's login/logout bookkeeping; add entries never open or close a
+// login, so they're skipped) and reports every category left with a
+// still-open login at that instant.
+//
+// This exists for task 281's ranged-report fix: worktime.Query's time-range
+// filter keeps an in-range logout but drops its matching login when that
+// login started before the range's Since bound, and BuildReport's
+// applyAction then hard-errors on the resulting orphan logout ("logout
+// without login for ..."). cli.reportEntries calls this against the FULL
+// unfiltered history to find any such straddling sessions, then splices in
+// a synthetic login pinned to the range boundary itself (not the session's
+// true start) so only the in-range portion gets credited — see
+// cli.withBoundaryLogins.
+//
+// entries need not be pre-sorted or pre-restricted to before `before`;
+// both are handled here the same way BuildReport handles its own input.
+func OpenLoginsBefore(entries []Entry, before time.Time) []BoundaryLogin {
+	beforeEpoch := before.Unix()
+	login := map[string]openLogin{}
+	for _, entry := range sortEntriesForReport(entries) {
+		if entry.Epoch >= beforeEpoch {
+			break // sorted ascending: nothing from here on is "before"
+		}
+		category := entryCategory(entry)
+		switch strings.ToLower(strings.TrimSpace(entry.Action)) {
+		case actionLogin:
+			// Bug-compatible with applyAction: a second login for an
+			// already-open category silently overwrites the first (Ruby's
+			// "already logged in" guard is dead code — see applyAction's
+			// comment). Replaying that same overwrite here keeps this
+			// boundary scan consistent with what a full replay would do.
+			login[category] = openLogin{Epoch: entry.Epoch, Host: entry.Host}
+		case actionLogout:
+			delete(login, category)
+		}
+	}
+
+	out := make([]BoundaryLogin, 0, len(login))
+	for category, open := range login {
+		out = append(out, BoundaryLogin{Category: category, Host: open.Host})
+	}
+	// Deterministic order: callers (and their tests) shouldn't have to
+	// account for Go's randomized map iteration order.
+	slices.SortFunc(out, func(a, b BoundaryLogin) int {
+		return strings.Compare(a.Category, b.Category)
+	})
+	return out
+}
+
 // reportState is the mutable state report() threads through sorted_entries:
 // the day/week currently being accumulated, open logins, and the two
 // running totals (balance, buffer) that persist across week boundaries.

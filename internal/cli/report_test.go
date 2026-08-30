@@ -80,6 +80,65 @@ func TestReportEmptyStoreProducesEmptyOutput(t *testing.T) {
 	}
 }
 
+// TestReportRangedCreditsPortionOfSessionCrossingBoundary is task 281's
+// regression guardrail: a session that logs in before a ranged report's
+// Since boundary and logs out inside it must not abort the report. Before
+// the fix, worktime.Query's time filter dropped the pre-boundary login but
+// kept the in-range logout, and BuildReport's applyAction hard-errored with
+// "logout without login". The session here spans the 2025-12-31/2026-01-01
+// boundary (22:00 -> 02:00, 4h total) so `work report 2026-01` exercises the
+// exact straddling case, deterministically (no dependency on the real
+// wall-clock "today").
+func TestReportRangedCreditsPortionOfSessionCrossingBoundary(t *testing.T) {
+	store := newScratchStore(t)
+
+	if _, err := runWork(t, store, "start", "work", "--at", "2025-12-31T22:00"); err != nil {
+		t.Fatalf("work start: %v", err)
+	}
+	if _, err := runWork(t, store, "stop", "work", "--at", "2026-01-01T02:00"); err != nil {
+		t.Fatalf("work stop: %v", err)
+	}
+
+	out, err := runWork(t, store, "report", "2026-01")
+	if err != nil {
+		t.Fatalf("work report 2026-01: %v", err)
+	}
+	// Only the in-range slice (2026-01-01T00:00 through 02:00 = 2h) must be
+	// credited, not the session's full 4h span -- crediting the whole span
+	// would double-count hours that belong to December.
+	if !strings.Contains(out, "work:2.00h") {
+		t.Errorf("expected work:2.00h (in-range portion only), got:\n%s", out)
+	}
+	// The synthetic boundary login must not leak an out-of-range December
+	// day line into a January-only report.
+	if strings.Contains(out, "20251231") {
+		t.Errorf("out-of-range day 20251231 must not appear in a Jan-only report, got:\n%s", out)
+	}
+}
+
+// TestReportFullHistoryStillCreditsEntireStraddlingSession confirms the fix
+// is scoped to the ranged path: a no-args (full-history) report over the
+// same straddling session from the test above must still credit the whole
+// 4h span, since nothing is being filtered out there.
+func TestReportFullHistoryStillCreditsEntireStraddlingSession(t *testing.T) {
+	store := newScratchStore(t)
+
+	if _, err := runWork(t, store, "start", "work", "--at", "2025-12-31T22:00"); err != nil {
+		t.Fatalf("work start: %v", err)
+	}
+	if _, err := runWork(t, store, "stop", "work", "--at", "2026-01-01T02:00"); err != nil {
+		t.Fatalf("work stop: %v", err)
+	}
+
+	out, err := runWork(t, store, "report")
+	if err != nil {
+		t.Fatalf("work report: %v", err)
+	}
+	if !strings.Contains(out, "work:4.00h") {
+		t.Errorf("expected work:4.00h (full session, no range filtering), got:\n%s", out)
+	}
+}
+
 // TestReportTooManyArgsFails confirms report's positional argument is capped
 // at one (cobra.MaximumNArgs(1)), matching list/search's "0 or 1 range" shape.
 func TestReportTooManyArgsFails(t *testing.T) {

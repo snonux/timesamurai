@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -57,6 +58,12 @@ func runReport(cmd *cobra.Command, args []string) error {
 // buildFilter/worktime.Query when a range was given. Filtering (rather than
 // re-deriving Since/Until bounds here) reuses t61's already-tested Filter
 // logic instead of a second, potentially-diverging implementation.
+//
+// A ranged query filters purely on each entry's own epoch, so a session that
+// logged in before the range and logged out inside it loses its login entry
+// but keeps its logout -- BuildReport would then hard-error with "logout
+// without login" (task 281). withBoundaryLogins repairs exactly that case
+// before the entries are handed to BuildReport.
 func reportEntries(store *worktime.Store, rangeArg string) ([]worktime.Entry, error) {
 	all := worktime.CollectEntries(store)
 	if rangeArg == "" {
@@ -76,5 +83,43 @@ func reportEntries(store *worktime.Store, rangeArg string) ([]worktime.Entry, er
 	for i, row := range rows {
 		entries[i] = row.Entry
 	}
-	return entries, nil
+	return withBoundaryLogins(entries, all, filter.Since), nil
+}
+
+// withBoundaryLogins splices a synthetic login into entries for every
+// category that (per the FULL unfiltered history in all) still had a login
+// open immediately before since -- a session straddling the range's Since
+// boundary. Query already dropped that session's real login (it falls
+// before Since) while keeping its logout (it falls inside the range), which
+// is what produces the orphan "logout without login" BuildReport otherwise
+// errors on.
+//
+// The synthetic entry is pinned to since itself, not the session's true
+// start: this deliberately credits only the in-range portion of the session
+// (e.g. today's slice of a login that started yesterday) rather than the
+// whole multi-day span, and keeps the entry from landing on an out-of-range
+// day that would otherwise leak into the printed report as its own day
+// line. A category with no open login at since is untouched; since.IsZero()
+// (no lower bound at all, e.g. a range with only an Until) is a no-op since
+// nothing can precede an unset boundary.
+func withBoundaryLogins(entries, all []worktime.Entry, since time.Time) []worktime.Entry {
+	if since.IsZero() {
+		return entries
+	}
+
+	open := worktime.OpenLoginsBefore(all, since)
+	if len(open) == 0 {
+		return entries
+	}
+
+	out := make([]worktime.Entry, 0, len(entries)+len(open))
+	for _, boundary := range open {
+		out = append(out, worktime.Entry{
+			Action: "login",
+			Epoch:  since.Unix(),
+			Host:   boundary.Host,
+			Tags:   []string{boundary.Category},
+		})
+	}
+	return append(out, entries...)
 }
