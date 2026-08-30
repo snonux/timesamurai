@@ -2,12 +2,43 @@ package worktime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 )
+
+// ErrExportWouldDiscard is the sentinel wrapped by ExportHost's error when
+// ExportOptions.Strict is set and export would discard on-disk entries that
+// have no counterpart in the fresh export (see ExportHost's package doc
+// comment for the fail-closed rationale). Callers can match it with
+// errors.Is to distinguish a refused export from any other failure (I/O,
+// invalid host, etc.).
+var ErrExportWouldDiscard = errors.New("export refused: writing would discard on-disk entries absent from the fresh export")
+
+// ExportOptions configures ExportHost/ExportAll's legacy-export behavior.
+type ExportOptions struct {
+	// Strict switches ExportHost from warn-and-overwrite to fail-closed:
+	// when export would discard on-disk entries with no counterpart in the
+	// fresh export -- i.e. worktime.rb or a hand edit changed
+	// db.<host>.json since the last export -- ExportHost refuses to write
+	// and returns an error wrapping ErrExportWouldDiscard instead of
+	// overwriting them. The on-disk file is left untouched.
+	//
+	// Strict exists for operators who want a hard stop during the
+	// dual-tool coexistence window instead of relying on catching the
+	// stderr warning. It is opt-in: the zero value (false) preserves the
+	// original warn-and-overwrite behavior so existing workflows and
+	// automation are unaffected.
+	Strict bool
+	// WarnOut receives the discard warning in non-strict mode; a nil
+	// WarnOut defaults to os.Stderr so the warning is never silently
+	// swallowed by an uninterested caller. Unused in strict mode, since a
+	// refusal is reported through the returned error instead.
+	WarnOut io.Writer
+}
 
 // ExportResult summarizes one host's legacy export: how many entries were
 // written, and which on-disk entries (if any) were overwritten away because
@@ -22,26 +53,29 @@ type ExportResult struct {
 // entries for host, so worktime.rb keeps a report-only-usable view of data
 // that now lives in the JSONL store.
 //
-// WHY warn-and-proceed, never refuse, never re-import: this is a deliberate
+// WHY warn-and-proceed by default, never re-import: this is a deliberate
 // one-way projection (migrate.go is the one-way trip in the other
 // direction; together they are never a two-way sync). The JSONL store is
 // the single source of truth from here on. If worktime.rb or a human edits
 // db.<host>.json after an export — the only way it can gain data the store
 // doesn't have — that edit is about to be overwritten, since ExportHost
 // always regenerates the file fresh from the store. That loss is real, so
-// this function names exactly what is disappearing before it writes. But it
-// deliberately never refuses to export (a stale or hand-edited legacy file
-// must never block the JSONL side of the tool from doing its job) and never
-// folds the discarded entries back into the store (merging report-only
-// edits into the store would make the store itself only report-only
-// reliable, defeating the point of the rewrite). Operators who need those
-// edits keep them by re-applying them through the JSONL-side commands
-// before the next export.
+// this function names exactly what is disappearing before it writes. By
+// default it never refuses to export (a stale or hand-edited legacy file
+// must never block the JSONL side of the tool from doing its job by
+// default) and never folds the discarded entries back into the store
+// (merging report-only edits into the store would make the store itself
+// only report-only reliable, defeating the point of the rewrite). Operators
+// who need those edits keep them by re-applying them through the JSONL-side
+// commands before the next export.
 //
-// warnOut receives the discard warning, if any; a nil warnOut defaults to
-// os.Stderr so the warning is never silently swallowed by an uninterested
-// caller.
-func ExportHost(ctx context.Context, store *Store, dbDir, host string, warnOut io.Writer) (ExportResult, error) {
+// opts.Strict flips that default: when set, a would-be discard makes
+// ExportHost refuse to write at all (see ExportOptions.Strict) instead of
+// warning and overwriting, for operators who'd rather stop and investigate
+// than risk losing a Ruby-side edit during the coexistence window. Discard
+// detection and the JSONL-source-of-truth contract are unchanged either
+// way; Strict only changes what happens once a discard is detected.
+func ExportHost(ctx context.Context, store *Store, dbDir, host string, opts ExportOptions) (ExportResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ExportResult{}, err
 	}
@@ -49,6 +83,7 @@ func ExportHost(ctx context.Context, store *Store, dbDir, host string, warnOut i
 	if err != nil {
 		return ExportResult{}, err
 	}
+	warnOut := opts.WarnOut
 	if warnOut == nil {
 		warnOut = os.Stderr
 	}
@@ -61,6 +96,13 @@ func ExportHost(ctx context.Context, store *Store, dbDir, host string, warnOut i
 	fresh := buildFreshLegacyEntries(host, store.Entries(host))
 	discarded := discardedLegacyEntries(onDisk.Entries[host], fresh)
 	if len(discarded) > 0 {
+		if opts.Strict {
+			// Fail closed: return before SaveLegacyHost so the on-disk
+			// file is left exactly as the operator (or worktime.rb) left
+			// it, and the caller gets both the error and the entries that
+			// triggered it for reporting.
+			return ExportResult{Host: host, Discarded: discarded}, strictDiscardError(host, discarded)
+		}
 		if err := warnDiscarded(warnOut, host, discarded); err != nil {
 			return ExportResult{}, fmt.Errorf("write discard warning for host %q: %w", host, err)
 		}
@@ -74,11 +116,25 @@ func ExportHost(ctx context.Context, store *Store, dbDir, host string, warnOut i
 	return ExportResult{Host: host, Written: len(fresh), Discarded: discarded}, nil
 }
 
+// strictDiscardError builds the error ExportHost returns in strict mode
+// when export would discard on-disk entries; it names the host, the count,
+// and the file, and wraps ErrExportWouldDiscard so callers can match it
+// with errors.Is regardless of the exact wording.
+func strictDiscardError(host string, discarded []LegacyEntry) error {
+	return fmt.Errorf("%w: host %q has %d entr(y/ies) in %s absent from the fresh export "+
+		"(worktime.rb or a hand edit since the last export?); re-apply the change through a "+
+		"timesamurai work command before exporting again, or drop --strict to overwrite as before",
+		ErrExportWouldDiscard, host, len(discarded), legacyDBFileName(host))
+}
+
 // ExportAll exports every host currently known to store, in sorted host
 // order, into dbDir. It stops at the first hard error (I/O or encode
-// failure); discard warnings never stop it, since they are advisory only —
-// see ExportHost's warn-and-proceed contract.
-func ExportAll(ctx context.Context, store *Store, dbDir string, warnOut io.Writer) ([]ExportResult, error) {
+// failure). In the default (non-strict) mode discard warnings never stop
+// it, since they are advisory only — see ExportHost's warn-and-proceed
+// contract. In opts.Strict mode a would-be discard on any host IS a hard
+// error (ErrExportWouldDiscard), so ExportAll stops there too, leaving that
+// host's file untouched and every host after it unexported for this run.
+func ExportAll(ctx context.Context, store *Store, dbDir string, opts ExportOptions) ([]ExportResult, error) {
 	hosts := store.Hosts()
 	results := make([]ExportResult, 0, len(hosts))
 
@@ -86,7 +142,7 @@ func ExportAll(ctx context.Context, store *Store, dbDir string, warnOut io.Write
 		if err := ctx.Err(); err != nil {
 			return results, err
 		}
-		result, err := ExportHost(ctx, store, dbDir, host, warnOut)
+		result, err := ExportHost(ctx, store, dbDir, host, opts)
 		if err != nil {
 			return results, err
 		}

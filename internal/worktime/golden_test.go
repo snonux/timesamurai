@@ -318,7 +318,7 @@ func migrateThenExport(t *testing.T, ctx context.Context, dbDir string, wantTota
 
 	exportDir := t.TempDir()
 	var warn bytes.Buffer
-	results, err := ExportAll(ctx, store, exportDir, &warn)
+	results, err := ExportAll(ctx, store, exportDir, ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("ExportAll: %v", err)
 	}

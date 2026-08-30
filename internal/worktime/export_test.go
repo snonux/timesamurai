@@ -3,6 +3,7 @@ package worktime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +31,7 @@ func TestExportHost_CreatesFile(t *testing.T) {
 	}
 
 	var warn bytes.Buffer
-	result, err := ExportHost(ctx, store, dbDir, "earth", &warn)
+	result, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("ExportHost: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestExportHost_SecondExportAfterMutationUpdates(t *testing.T) {
 	}
 
 	var warn bytes.Buffer
-	if _, err := ExportHost(ctx, store, dbDir, "earth", &warn); err != nil {
+	if _, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &warn}); err != nil {
 		t.Fatalf("first ExportHost: %v", err)
 	}
 	if warn.Len() != 0 {
@@ -94,7 +95,7 @@ func TestExportHost_SecondExportAfterMutationUpdates(t *testing.T) {
 	}
 
 	warn.Reset()
-	result, err := ExportHost(ctx, store, dbDir, "earth", &warn)
+	result, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("second ExportHost: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestExportHost_DiscardDetectionNamesDivergedEntries(t *testing.T) {
 	if err := store.Append(ctx, kept); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	if _, err := ExportHost(ctx, store, dbDir, "earth", &bytes.Buffer{}); err != nil {
+	if _, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &bytes.Buffer{}}); err != nil {
 		t.Fatalf("first ExportHost: %v", err)
 	}
 
@@ -146,7 +147,7 @@ func TestExportHost_DiscardDetectionNamesDivergedEntries(t *testing.T) {
 	}
 
 	var warn bytes.Buffer
-	result, err := ExportHost(ctx, store, dbDir, "earth", &warn)
+	result, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("ExportHost must never error on discard: %v", err)
 	}
@@ -179,6 +180,148 @@ func TestExportHost_DiscardDetectionNamesDivergedEntries(t *testing.T) {
 	}
 }
 
+// TestExportHost_DefaultOverwritesWithWarning pins down requirement (1) of
+// k81: with ExportOptions left at its zero value (Strict unset), a discard
+// still warns-and-overwrites exactly as before Strict was introduced. This
+// is a smaller, more direct check than
+// TestExportHost_DiscardDetectionNamesDivergedEntries, which additionally
+// exercises the warning's exact contents; here the point is only that the
+// zero value never opts into fail-closed behavior.
+func TestExportHost_DefaultOverwritesWithWarning(t *testing.T) {
+	ctx := context.Background()
+	storeDir := t.TempDir()
+	dbDir := t.TempDir()
+
+	store, err := Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	kept := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	if err := store.Append(ctx, kept); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if _, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{}); err != nil {
+		t.Fatalf("first ExportHost: %v", err)
+	}
+
+	// Hand-edit db.earth.json to add an entry the store doesn't know about,
+	// simulating worktime.rb or a human writing between exports.
+	strayRaw := `{
+  "entries": {
+    "earth": [
+      {"action":"login","what":"work","epoch":100,"source":"earth","human":"h"},
+      {"action":"add","what":"offsite","epoch":150,"source":"earth","human":"h","value":900}
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dbDir, "db.earth.json"), []byte(strayRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var warn bytes.Buffer
+	// ExportOptions{} (Strict unset, i.e. false) must behave exactly like
+	// the pre-k81 signature did: warn, then overwrite.
+	result, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{WarnOut: &warn})
+	if err != nil {
+		t.Fatalf("default ExportHost must never error on discard: %v", err)
+	}
+	if len(result.Discarded) != 1 {
+		t.Fatalf("Discarded = %+v, want 1 entry", result.Discarded)
+	}
+	if warn.Len() == 0 {
+		t.Fatal("expected a discard warning in default mode")
+	}
+
+	db, err := LoadLegacyHost(ctx, dbDir, "earth")
+	if err != nil {
+		t.Fatalf("LoadLegacyHost: %v", err)
+	}
+	if len(db.Entries["earth"]) != 1 {
+		t.Fatalf("post-export legacy entries = %+v, want only the login (overwrite must have proceeded)", db.Entries["earth"])
+	}
+}
+
+// TestExportHost_StrictRefusesOnDiscard covers requirement (2) of k81: with
+// ExportOptions.Strict set, a discard makes ExportHost refuse to write at
+// all instead of overwriting. The on-disk file must be left byte-for-byte
+// as the external edit left it, and the returned error must be a clear,
+// matchable failure (wrapping ErrExportWouldDiscard) rather than a bare
+// overwrite-with-warning.
+func TestExportHost_StrictRefusesOnDiscard(t *testing.T) {
+	ctx := context.Background()
+	storeDir := t.TempDir()
+	dbDir := t.TempDir()
+
+	store, err := Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	kept := Entry{ID: 1, Action: "login", Epoch: 100, Host: "earth", Tags: []string{"work"}}
+	if err := store.Append(ctx, kept); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if _, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{}); err != nil {
+		t.Fatalf("first ExportHost: %v", err)
+	}
+
+	// Externally modify db.earth.json after the last export -- worktime.rb
+	// or a hand edit adding an entry the store has never heard of.
+	legacyPath := filepath.Join(dbDir, "db.earth.json")
+	strayRaw := `{
+  "entries": {
+    "earth": [
+      {"action":"login","what":"work","epoch":100,"source":"earth","human":"h"},
+      {"action":"add","what":"offsite","epoch":150,"source":"earth","human":"h","value":900,"descr":"hand-added"}
+    ]
+  }
+}`
+	if err := os.WriteFile(legacyPath, []byte(strayRaw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(legacyPath)
+	if err != nil {
+		t.Fatalf("read legacy file before strict export: %v", err)
+	}
+
+	var warn bytes.Buffer
+	result, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{Strict: true, WarnOut: &warn})
+	if err == nil {
+		t.Fatal("expected strict ExportHost to refuse, got nil error")
+	}
+	if !errors.Is(err, ErrExportWouldDiscard) {
+		t.Fatalf("error = %v, want it to wrap ErrExportWouldDiscard", err)
+	}
+	for _, want := range []string{"earth", "strict"} {
+		if !strings.Contains(strings.ToLower(err.Error()), want) {
+			t.Fatalf("error %q missing %q", err.Error(), want)
+		}
+	}
+	if len(result.Discarded) != 1 {
+		t.Fatalf("result.Discarded = %+v, want the 1 entry that triggered the refusal", result.Discarded)
+	}
+	// Strict mode reports the refusal through the returned error, not
+	// stderr-style warning output.
+	if warn.Len() != 0 {
+		t.Fatalf("strict refusal must not also print the warn-and-proceed banner, got:\n%s", warn.String())
+	}
+
+	// The file must be left exactly as the external edit left it: refusing
+	// means refusing to write, not writing a partial or fresh version.
+	after, err := os.ReadFile(legacyPath)
+	if err != nil {
+		t.Fatalf("read legacy file after strict export: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("strict refusal must leave the on-disk file untouched:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+
+	// And, as always, the discarded entry must never be folded into the
+	// store even when it triggered a refusal.
+	if got := store.Entries("earth"); len(got) != 1 {
+		t.Fatalf("store must not re-import the stray entry: %+v", got)
+	}
+}
+
 func TestExportHost_NeverErrorsWithMultipleDiscards(t *testing.T) {
 	ctx := context.Background()
 	storeDir := t.TempDir()
@@ -203,7 +346,7 @@ func TestExportHost_NeverErrorsWithMultipleDiscards(t *testing.T) {
 	}
 
 	var warn bytes.Buffer
-	result, err := ExportHost(ctx, store, dbDir, "mars", &warn)
+	result, err := ExportHost(ctx, store, dbDir, "mars", ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("ExportHost must never error: %v", err)
 	}
@@ -246,7 +389,7 @@ func TestExportAll_MultiHost(t *testing.T) {
 	}
 
 	var warn bytes.Buffer
-	results, err := ExportAll(ctx, store, dbDir, &warn)
+	results, err := ExportAll(ctx, store, dbDir, ExportOptions{WarnOut: &warn})
 	if err != nil {
 		t.Fatalf("ExportAll: %v", err)
 	}
@@ -301,10 +444,10 @@ func TestExportHost_RejectsInvalidHost(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	if _, err := ExportHost(ctx, store, dbDir, "  ", nil); err == nil {
+	if _, err := ExportHost(ctx, store, dbDir, "  ", ExportOptions{}); err == nil {
 		t.Fatal("expected error for empty host")
 	}
-	if _, err := ExportHost(ctx, store, dbDir, "../evil", nil); err == nil {
+	if _, err := ExportHost(ctx, store, dbDir, "../evil", ExportOptions{}); err == nil {
 		t.Fatal("expected error for path-traversal host")
 	}
 }
@@ -320,7 +463,7 @@ func TestExportHost_RespectsCancelledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := ExportHost(ctx, store, dbDir, "earth", nil); err == nil {
+	if _, err := ExportHost(ctx, store, dbDir, "earth", ExportOptions{}); err == nil {
 		t.Fatal("expected context error")
 	}
 }

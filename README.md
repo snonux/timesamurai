@@ -56,15 +56,31 @@ and that Ruby write is gone.
 
 `ExportHost` does not fail silently here: it diffs the on-disk JSON against the fresh export
 it is about to write, and if anything on disk has no counterpart in the store it prints a
-loud warning to stderr naming every entry about to be discarded. It warns and proceeds — it
-never refuses to export and never re-imports the discarded entries into the store, by
-design (see the package doc comment on `ExportHost` in `internal/worktime/export.go`).
-Recovering a Ruby write that got discarded means re-applying it through a `timesamurai work`
-command before the next export, not editing the JSON again.
+loud warning to stderr naming every entry about to be discarded. By default it warns and
+proceeds — it never refuses to export and never re-imports the discarded entries into the
+store, by design (see the package doc comment on `ExportHost` in
+`internal/worktime/export.go`). Recovering a Ruby write that got discarded means re-applying
+it through a `timesamurai work` command before the next export, not editing the JSON again.
+
+#### `work export --strict`: opting into fail-closed export
+
+`work export --strict` flips that default for one run: if export would discard any on-disk
+entry, it refuses to write `db.<host>.json` at all (leaving the file exactly as it was) and
+exits nonzero with an error instead of warning-and-overwriting. Internally this is
+`worktime.ExportOptions{Strict: true}` threaded through `ExportHost`/`ExportAll`; the error
+wraps `worktime.ErrExportWouldDiscard` so scripts can match it with `errors.Is` instead of
+parsing text.
+
+Use `--strict` when you want a hard stop during the dual-tool coexistence window — for
+example in a cron job or pre-flight check that should fail loudly rather than quietly drop a
+`worktime.rb` write, or while manually reconciling a host you know has been edited outside
+`timesamurai work`. Leave it off (the default) for routine exports where warn-and-overwrite
+is the expected, unattended behavior; passing `--strict` never changes what counts as a
+discard, only what happens once one is detected.
 
 In short: **once a host is migrated, run `timesamurai work` for anything that writes.**
 `worktime.rb` is fine for reading, but treat every Ruby write as temporary until the next
-`work export`.
+`work export` — or run `work export --strict` if you'd rather be stopped than lose it.
 
 ### Fish dispatcher: `WORKTIME_IMPL`
 
