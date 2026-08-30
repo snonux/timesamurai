@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -77,6 +78,16 @@ func (s *Store) AppendUndo(ctx context.Context, host string, rec UndoRecord) err
 // insert → remove the after entry (leaves a tombstone so the id stays reserved);
 // modify → restore before; delete → restore before. The consumed record is removed
 // from the log (tombstones and remaining history stay for id allocation).
+//
+// applyUndoLocked (rewrites db.<host>.jsonl) and rewriteUndoFile (rewrites
+// undo.<host>.jsonl) each write their own file atomically via temp+fsync+rename,
+// but the pair is not atomic together. Task 581: if rewriteUndoFile failed after
+// applyUndoLocked had already landed, the DB came back reverted while the undo
+// log still listed the same record as pending, so a retry died with "entry id
+// not found" even though the caller believed nothing had happened. To close that
+// window, UndoLast snapshots the pre-undo entries before mutating and, if the
+// undo-log rewrite fails, rolls the DB back to that snapshot so the two files
+// never disagree about whether rec is still undoable.
 func (s *Store) UndoLast(ctx context.Context, host string) (UndoRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return UndoRecord{}, err
@@ -100,18 +111,60 @@ func (s *Store) UndoLast(ctx context.Context, host string) (UndoRecord, error) {
 		return UndoRecord{}, ErrNoUndo
 	}
 	rec := records[idx]
+	kept := keptUndoRecords(records, idx, rec)
+	prevEntries := cloneEntries(s.byHost[host])
+
 	if err := s.applyUndoLocked(ctx, host, rec); err != nil {
 		return UndoRecord{}, err
 	}
+	if err := rewriteUndoFile(path, kept); err != nil {
+		return UndoRecord{}, s.rollbackAfterFailedUndoRewrite(ctx, host, prevEntries, err)
+	}
+	return rec, nil
+}
 
+// keptUndoRecords returns the undo log contents after consuming records[idx]: the
+// consumed record is dropped, and an undone insert leaves a tombstone behind so
+// its id stays reserved for allocation even though it is no longer replayable.
+func keptUndoRecords(records []UndoRecord, idx int, rec UndoRecord) []UndoRecord {
 	kept := append(append([]UndoRecord{}, records[:idx]...), records[idx+1:]...)
 	if rec.Op == OpInsert && rec.After != nil {
 		kept = append(kept, insertTombstone(rec))
 	}
-	if err := rewriteUndoFile(path, kept); err != nil {
-		return UndoRecord{}, fmt.Errorf("rewrite undo for host %q: %w", host, err)
+	return kept
+}
+
+// rollbackAfterFailedUndoRewrite restores host's DB to prevEntries after
+// applyUndoLocked mutated it but the undo-log rewrite then failed. allowRestore
+// is passed as true because prevEntries is simply the state that was on disk
+// moments earlier, so the usual "id already used" guard does not apply.
+//
+// If the rollback write itself fails (e.g. disk exhausted for both files), the
+// DB and undo log can end up genuinely split; that residual case is reported
+// via the combined error message rather than silently swallowed, since a
+// two-file store without a shared journal cannot guarantee full atomicity
+// against a second consecutive I/O failure.
+func (s *Store) rollbackAfterFailedUndoRewrite(ctx context.Context, host string, prevEntries []Entry, rewriteErr error) error {
+	if rbErr := s.replaceHostLocked(ctx, host, prevEntries, true); rbErr != nil {
+		return fmt.Errorf("rewrite undo for host %q: %w (rollback to prior db state also failed: %v)", host, rewriteErr, rbErr)
 	}
-	return rec, nil
+	return fmt.Errorf("rewrite undo for host %q: %w (db rolled back, undo log unchanged)", host, rewriteErr)
+}
+
+// cloneEntries returns a deep copy of entries, cloning each Entry's Tags slice so
+// the snapshot cannot alias — and later be corrupted by mutations of — the
+// store's backing array (100 Go Mistakes #25 "not making a deep copy"; same
+// rationale as Store.Entries).
+func cloneEntries(entries []Entry) []Entry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]Entry, len(entries))
+	copy(out, entries)
+	for i := range out {
+		out[i].Tags = slices.Clone(out[i].Tags)
+	}
+	return out
 }
 
 func insertTombstone(rec UndoRecord) UndoRecord {

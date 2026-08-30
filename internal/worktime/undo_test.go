@@ -355,6 +355,118 @@ func TestUndo_AppendRoundTripJSONShape(t *testing.T) {
 	}
 }
 
+// TestUndo_FailedUndoLogRewriteRollsBackDB is the task-581 regression test.
+//
+// It forces rewriteUndoFile to fail *after* applyUndoLocked has already
+// rewritten db.earth.jsonl on disk, by pre-creating the undo log's temp-file
+// path ("undo.earth.jsonl.tmp") as a directory: rewriteUndoFile always writes
+// through that exact path, and os.OpenFile(..., O_CREATE|O_WRONLY|O_TRUNC) on
+// an existing directory fails immediately, before anything is written or
+// renamed. This is a pure filesystem seam — no production code changes needed
+// to inject the failure — and it leaves db.earth.jsonl (a different path in
+// the same directory) completely unaffected by the induced failure, so any
+// change observed in it must have come from applyUndoLocked or the fix's
+// rollback path.
+//
+// Before the fix, this left the DB reverted (entry removed) while the undo
+// log still listed the insert as pending — split state, and a follow-up
+// UndoLast failed with "entry id not found" even though the log looked
+// untouched. After the fix, UndoLast must roll the DB back to its pre-undo
+// snapshot so the two files agree again: either the call fully succeeds, or
+// both the DB and the undo log end up exactly as they were beforehand.
+func TestUndo_FailedUndoLogRewriteRollsBackDB(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	entry := Entry{
+		ID: 1, Action: "add", Epoch: 100, Host: "earth", Value: 3600,
+		Tags: []string{"work", "blogpost"}, Descr: "wrote post",
+	}
+	if err := store.Append(ctx, entry); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := store.AppendUndo(ctx, "earth", UndoRecord{
+		TS: 1, Op: OpInsert, ID: 1, After: &entry,
+	}); err != nil {
+		t.Fatalf("AppendUndo: %v", err)
+	}
+
+	dbPath := filepath.Join(dir, "db.earth.jsonl")
+	undoPath := filepath.Join(dir, "undo.earth.jsonl")
+	dbBefore, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read db before: %v", err)
+	}
+	undoBefore, err := os.ReadFile(undoPath)
+	if err != nil {
+		t.Fatalf("read undo before: %v", err)
+	}
+
+	// Block the undo-log rewrite's temp file with a directory so it fails
+	// after applyUndoLocked has already succeeded.
+	undoTmp := undoPath + tmpFileSuffix
+	if err := os.Mkdir(undoTmp, 0o755); err != nil {
+		t.Fatalf("mkdir undo tmp blocker: %v", err)
+	}
+
+	_, err = store.UndoLast(ctx, "earth")
+	if err == nil {
+		// The blocker failed to trigger (e.g. platform quirk); nothing left
+		// to assert about split state, but the log is a genuine surprise.
+		t.Fatal("expected UndoLast to fail with the undo-log temp path blocked")
+	}
+
+	dbAfter, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read db after: %v", err)
+	}
+	undoAfter, err := os.ReadFile(undoPath)
+	if err != nil {
+		t.Fatalf("read undo after: %v", err)
+	}
+	if !bytes.Equal(dbBefore, dbAfter) {
+		t.Fatalf("db split from undo log after failed rewrite:\nbefore=%s\nafter=%s", dbBefore, dbAfter)
+	}
+	if !bytes.Equal(undoBefore, undoAfter) {
+		t.Fatalf("undo log unexpectedly changed despite failed rewrite:\nbefore=%s\nafter=%s", undoBefore, undoAfter)
+	}
+
+	// In-memory view must match the rolled-back file, not the discarded
+	// mid-flight mutation.
+	got := store.Entries("earth")
+	if len(got) != 1 || !reflect.DeepEqual(got[0], entry) {
+		t.Fatalf("in-memory entries not rolled back: %+v", got)
+	}
+
+	// A fresh Open (reading the untouched files) should reach the identical
+	// state, confirming disk and memory never actually diverged.
+	if err := os.RemoveAll(undoTmp); err != nil {
+		t.Fatalf("remove undo tmp blocker: %v", err)
+	}
+	reopened, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	reGot := reopened.Entries("earth")
+	if !reflect.DeepEqual(reGot, got) {
+		t.Fatalf("reopened entries diverge from in-memory: got %+v want %+v", reGot, got)
+	}
+
+	// The undo record must still be undoable exactly as before the failed
+	// attempt -- retrying should now succeed instead of failing with
+	// "entry id not found".
+	if _, err := reopened.UndoLast(ctx, "earth"); err != nil {
+		t.Fatalf("retry UndoLast after rollback: %v", err)
+	}
+	if entries := reopened.Entries("earth"); len(entries) != 0 {
+		t.Fatalf("entries after retried undo: %+v", entries)
+	}
+}
+
 func errorContains(err error, substr string) bool {
 	if err == nil {
 		return false
