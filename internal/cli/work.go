@@ -19,14 +19,27 @@ func NewWorkCmd() *cobra.Command {
 		Use:   "work",
 		Short: "Track and adjust worked time",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
 	}
 
 	cmd.PersistentFlags().String("db", "", "override the legacy worktime.rb JSON directory (storage.db_dir)")
 	cmd.PersistentFlags().String("store", "", "override the JSONL store directory (storage.store_dir)")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "print full entry details instead of a one-line confirmation")
+
+	// 071: worktime.rb's legacy flags (--login, -a TIME, --what, ...) live as
+	// local flags on this command itself, so a bare `work --login ...` with
+	// no subcommand argument dispatches into worklegacy.go's shim instead of
+	// requiring the caller to already know the new `work login` syntax. This
+	// only fires when cobra resolves the command line to "work" itself --
+	// any real subcommand (`work start`) is routed to before this RunE ever
+	// runs, so legacy flags never combine with one (see registerLegacyFlags's
+	// doc comment for what happens if a caller tries).
+	legacy := registerLegacyFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if legacyActionRequested(legacy) {
+			return runLegacy(cmd, legacy)
+		}
+		return cmd.Help()
+	}
 
 	cmd.AddCommand(
 		newSessionCmd("start", "Open a work session", false, "start", worktime.Start),
