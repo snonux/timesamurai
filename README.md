@@ -1,5 +1,3 @@
-> **⚠️ PERSONAL-USE SOFTWARE:** This project is intended for my own personal use only. Use at your own risk.
-
 # timesamurai
 
 ![timesamurai](./logo-small.png)
@@ -53,25 +51,3 @@ go build -o timesamurai ./cmd/timesamurai
 timesamurai --help
 timesamurai --version
 ```
-
-## Logo
-
-`logo.svg` is the source: an enso — the unclosed brush circle — doubling as a clock face,
-with two katana for hands. The PNGs beside it are generated output, committed only because
-README and forge pages cannot render a local SVG reliably:
-
-| File | Size | Use |
-|---|---|---|
-| `logo.svg` | vector | the source; edit this one |
-| `logo.png` | 600x600 | full size |
-| `logo-small.png` | 300x300 | the README image above |
-| `icon.png` | 64x64 | favicon / small contexts |
-
-Regenerate them after editing the SVG:
-
-```sh
-mage logo
-```
-
-Needs ImageMagick built with librsvg (`magick -list format | grep RSVG`); its internal MSVG
-renderer does not handle the gradients.
