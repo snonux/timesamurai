@@ -28,6 +28,39 @@ var (
 	ErrEntryNotFound = errors.New("entry not found")
 )
 
+// entryReader is the narrow read-only slice of Store this file's lookups
+// need: list the known hosts and fetch one host's entries. It is defined
+// here at the point of use (Go convention: interfaces belong with the
+// consumer, not the producer) rather than depending on the concrete *Store,
+// so findEntry, openSessionHost, and allEntriesSorted -- none of which write
+// anything -- declare exactly the dependency they have and stay testable
+// against a fake without building a full Store. *Store already implements
+// this structurally; no change to Store itself is required.
+type entryReader interface {
+	Hosts() []string
+	Entries(host string) []Entry
+}
+
+// entryWriter is the narrow mutation surface insertEntry and replaceOne
+// need: allocate the next id, append a new entry, rewrite a host's entries
+// wholesale, and log an undo record. It embeds entryReader because both of
+// those helpers also read entries back first (replaceOne's callers -- and
+// Modify/Delete above them -- must find an entry before they can change it).
+// The exported Start/Stop/Add/Sub/Modify/Delete still take *Store directly,
+// since cli (the composition root) stores function values of their exact
+// signature (sessionAction, creditAction) and always wires the concrete
+// Store; entryWriter narrows the dependency one layer down, at the
+// unexported helpers that do the actual mutating. As with entryReader,
+// *Store already satisfies this interface structurally -- no change to
+// Store itself is required.
+type entryWriter interface {
+	entryReader
+	NextID(host string) (int64, error)
+	Append(ctx context.Context, entry Entry) error
+	ReplaceHost(ctx context.Context, host string, entries []Entry) error
+	AppendUndo(ctx context.Context, host string, rec UndoRecord) error
+}
+
 // EntryPatch carries only the fields a Modify call changes; nil fields keep
 // the entry's current value. Host and ID are deliberately not patchable:
 // <host>:<id> addressing must keep pointing at the same entry after a
@@ -248,7 +281,7 @@ func (p EntryPatch) apply(entry Entry) Entry {
 // rather than trying to roll back the append, since undoing a second,
 // independent file write on top of a first failure risks leaving worse
 // partial state than it fixes.
-func insertEntry(ctx context.Context, store *Store, cfg config.AccountingConfig, host, action string, tags []string, epoch, value int64, descr string) (Entry, error) {
+func insertEntry(ctx context.Context, store entryWriter, cfg config.AccountingConfig, host, action string, tags []string, epoch, value int64, descr string) (Entry, error) {
 	id, err := store.NextID(host)
 	if err != nil {
 		return Entry{}, err
@@ -277,7 +310,7 @@ func insertEntry(ctx context.Context, store *Store, cfg config.AccountingConfig,
 }
 
 // findEntry looks up id within host's entries.
-func findEntry(store *Store, host string, id int64) (Entry, error) {
+func findEntry(store entryReader, host string, id int64) (Entry, error) {
 	for _, e := range store.Entries(host) {
 		if e.ID == id {
 			return e, nil
@@ -289,7 +322,7 @@ func findEntry(store *Store, host string, id int64) (Entry, error) {
 // replaceOne rewrites host's file with the entry at id either replaced by
 // *replacement, or removed when replacement is nil. ReplaceHost needs the
 // whole host slice since modify/delete are rewrites, not appends.
-func replaceOne(ctx context.Context, store *Store, host string, id int64, replacement *Entry) error {
+func replaceOne(ctx context.Context, store entryWriter, host string, id int64, replacement *Entry) error {
 	current := store.Entries(host)
 	next := make([]Entry, 0, len(current))
 	found := false
@@ -331,7 +364,7 @@ func sessionKey(cfg config.AccountingConfig, tags []string) (string, error) {
 // global epoch order. Entries whose tags don't resolve to a session key
 // (malformed historical data) are skipped rather than aborting the whole
 // check, since they simply don't participate in this category's state.
-func openSessionHost(store *Store, cfg config.AccountingConfig, category string) (string, bool, error) {
+func openSessionHost(store entryReader, cfg config.AccountingConfig, category string) (string, bool, error) {
 	openHost := ""
 	for _, e := range allEntriesSorted(store) {
 		key, err := sessionKey(cfg, e.Tags)
@@ -351,7 +384,7 @@ func openSessionHost(store *Store, cfg config.AccountingConfig, category string)
 // allEntriesSorted merges every host's entries into one globally
 // epoch-ordered slice, so login/logout state can be replayed across hosts
 // rather than per host.
-func allEntriesSorted(store *Store) []Entry {
+func allEntriesSorted(store entryReader) []Entry {
 	var all []Entry
 	for _, host := range store.Hosts() {
 		all = append(all, store.Entries(host)...)
