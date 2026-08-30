@@ -383,21 +383,53 @@ func (s *Store) rewriteHostLocked(ctx context.Context, host string, entries []En
 	return rewriteJSONLFile(path, entries)
 }
 
+// appendJSONLLine appends a single line to path and fsyncs it before
+// returning, so a successful call is durable across a crash/power loss
+// (100 Go Mistakes #54: not fsyncing after a write and swallowing Close
+// errors can both silently lose the very data the caller thinks was
+// saved). Mirrors rewriteJSONLFile's write -> Sync -> Close ordering,
+// with every step's error surfaced instead of being discarded.
 func appendJSONLLine(path string, line []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return fmt.Errorf("open %q for append: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
 
-	n, err := f.Write(line)
-	if err != nil {
-		return fmt.Errorf("append to %q: %w", path, err)
+	writeErr, closeErr := writeSyncClose(f, line)
+	if writeErr != nil {
+		return fmt.Errorf("append to %q: %w", path, writeErr)
 	}
-	if n != len(line) {
-		return fmt.Errorf("append to %q: short write %d/%d", path, n, len(line))
+	if closeErr != nil {
+		return fmt.Errorf("close %q after append: %w", path, closeErr)
 	}
 	return nil
+}
+
+// syncCloser is the narrow file surface writeSyncClose needs. *os.File
+// satisfies it; tests substitute a fake to exercise the Sync/Close failure
+// paths, which are impractical to trigger reliably on a real file.
+type syncCloser interface {
+	io.Writer
+	Sync() error
+	Close() error
+}
+
+// writeSyncClose writes line to f, then always Syncs and Closes it (Close
+// runs even if Write/Sync failed, so the fd is never leaked), returning the
+// write/Sync error and the Close error separately so the caller can report
+// each failure mode with its own message.
+func writeSyncClose(f syncCloser, line []byte) (writeErr, closeErr error) {
+	n, err := f.Write(line)
+	switch {
+	case err != nil:
+		writeErr = err
+	case n != len(line):
+		writeErr = fmt.Errorf("short write %d/%d", n, len(line))
+	default:
+		writeErr = f.Sync()
+	}
+	closeErr = f.Close()
+	return writeErr, closeErr
 }
 
 func rewriteJSONLFile(path string, entries []Entry) error {

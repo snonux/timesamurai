@@ -582,6 +582,98 @@ func TestStore_AppendClonesTagsSlice(t *testing.T) {
 	}
 }
 
+// fakeSyncCloser is a writable fake standing in for *os.File so tests can
+// exercise writeSyncClose's Sync/Close failure paths without needing to
+// force a real file's Sync or Close to fail, which isn't portable.
+type fakeSyncCloser struct {
+	writeErr error
+	syncErr  error
+	closeErr error
+	written  []byte
+	synced   bool
+	closed   bool
+}
+
+func (f *fakeSyncCloser) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	f.written = append(f.written, p...)
+	return len(p), nil
+}
+
+func (f *fakeSyncCloser) Sync() error {
+	f.synced = true
+	return f.syncErr
+}
+
+func (f *fakeSyncCloser) Close() error {
+	f.closed = true
+	return f.closeErr
+}
+
+func TestWriteSyncClose_SyncsBeforeReturningSuccess(t *testing.T) {
+	f := &fakeSyncCloser{}
+	writeErr, closeErr := writeSyncClose(f, []byte("line\n"))
+	if writeErr != nil || closeErr != nil {
+		t.Fatalf("writeSyncClose: got writeErr=%v closeErr=%v, want nil, nil", writeErr, closeErr)
+	}
+	if !f.synced {
+		t.Fatal("writeSyncClose did not call Sync before returning success")
+	}
+	if !f.closed {
+		t.Fatal("writeSyncClose did not call Close")
+	}
+	if string(f.written) != "line\n" {
+		t.Fatalf("written: got %q, want %q", f.written, "line\n")
+	}
+}
+
+func TestWriteSyncClose_SurfacesSyncError(t *testing.T) {
+	wantErr := errors.New("sync boom")
+	f := &fakeSyncCloser{syncErr: wantErr}
+	writeErr, closeErr := writeSyncClose(f, []byte("line\n"))
+	if !errors.Is(writeErr, wantErr) {
+		t.Fatalf("writeErr: got %v, want %v", writeErr, wantErr)
+	}
+	if closeErr != nil {
+		t.Fatalf("closeErr: got %v, want nil", closeErr)
+	}
+	if !f.closed {
+		t.Fatal("Close must still run even though Sync failed, so the fd is not leaked")
+	}
+}
+
+func TestWriteSyncClose_SurfacesCloseErrorEvenWhenSyncSucceeds(t *testing.T) {
+	wantErr := errors.New("close boom")
+	f := &fakeSyncCloser{closeErr: wantErr}
+	writeErr, closeErr := writeSyncClose(f, []byte("line\n"))
+	if writeErr != nil {
+		t.Fatalf("writeErr: got %v, want nil", writeErr)
+	}
+	if !errors.Is(closeErr, wantErr) {
+		t.Fatalf("closeErr: got %v, want %v", closeErr, wantErr)
+	}
+	if !f.synced {
+		t.Fatal("Sync must have run before the (failing) Close")
+	}
+}
+
+func TestAppendJSONLLine_WritesLineDurably(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "db.earth.jsonl")
+	if err := appendJSONLLine(path, []byte(`{"id":1}`+"\n")); err != nil {
+		t.Fatalf("appendJSONLLine: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != `{"id":1}`+"\n" {
+		t.Fatalf("file contents: got %q", got)
+	}
+}
+
 func entryEqual(a, b Entry) bool {
 	if a.ID != b.ID || a.Action != b.Action || a.Epoch != b.Epoch || a.Host != b.Host || a.Value != b.Value || a.Descr != b.Descr {
 		return false
