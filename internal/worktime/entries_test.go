@@ -515,6 +515,59 @@ func TestDelete_UndoRestoresEntry(t *testing.T) {
 	}
 }
 
+// TestDelete_WatermarkSurvivesReopenWithHigherUndoID exercises the real
+// entries.Delete + Store.AppendUndo path (not a hand-written db/undo fixture
+// like store_test.go's TestStore_IDAllocationConsidersUndo) followed by a
+// genuine process-restart Open(): after deleting the higher of two ids, the
+// live entries file only contains the lower id, so the reopened store's
+// watermark must come from the undo log's record of the deleted id, not from
+// what is left on disk. This is the concrete "max(entries, undo log)"
+// scenario task 371 calls out, end to end rather than at the file-format
+// level alone.
+func TestDelete_WatermarkSurvivesReopenWithHigherUndoID(t *testing.T) {
+	store, ctx := openStore(t)
+	cfg := testAccountingConfig()
+	dir := store.Dir()
+
+	if _, err := Add(ctx, store, cfg, "earth", nil, time.Hour, time.Unix(100, 0), "first"); err != nil {
+		t.Fatalf("Add id 1: %v", err)
+	}
+	if _, err := Add(ctx, store, cfg, "earth", nil, time.Hour, time.Unix(200, 0), "second"); err != nil {
+		t.Fatalf("Add id 2: %v", err)
+	}
+	if _, err := Delete(ctx, store, "2", "earth"); err != nil {
+		t.Fatalf("Delete id 2: %v", err)
+	}
+
+	// The live entries file now holds only id 1; id 2 survives solely in the
+	// undo log's delete record.
+	if got := store.Entries("earth"); len(got) != 1 || got[0].ID != 1 {
+		t.Fatalf("store.Entries(earth) before reopen: %+v", got)
+	}
+
+	reopened, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("re-Open: %v", err)
+	}
+	if got := reopened.Entries("earth"); len(got) != 1 || got[0].ID != 1 {
+		t.Fatalf("reopened.Entries(earth): %+v", got)
+	}
+
+	next, err := reopened.NextID("earth")
+	if err != nil {
+		t.Fatalf("NextID: %v", err)
+	}
+	if next != 3 {
+		t.Fatalf("NextID after reopen = %d, want 3 (watermark must come from undo log's id 2, not entries' max of 1)", next)
+	}
+
+	// Reusing the deleted id after a fresh Open must still be rejected.
+	err = reopened.Append(ctx, Entry{ID: 2, Action: "add", Epoch: 300, Host: "earth", Value: 3600, Tags: []string{"work"}})
+	if err == nil {
+		t.Fatal("expected rejection of deleted id 2 reused after reopen")
+	}
+}
+
 func TestModify_InvalidAddress(t *testing.T) {
 	store, ctx := openStore(t)
 	cfg := testAccountingConfig()
