@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -11,10 +12,34 @@ import (
 )
 
 func main() {
+	// pflag/cobra treat a single-dash "-version" as a shorthand flag
+	// cluster (-v -e -r -s -i -o -n) rather than an alias for "--version",
+	// so it fails with "unknown shorthand flag e in -ersion" before cobra
+	// ever gets a chance to recognize it. Intercept that exact invocation
+	// ourselves before handing args to cobra, so both "-version" and
+	// "--version" print the same thing.
+	if handleLegacyVersionFlag(os.Args[1:], os.Stdout) {
+		return
+	}
 	if err := newRoot().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
+}
+
+// handleLegacyVersionFlag prints the version and reports true when args is
+// exactly the single-dash "-version" flag. It only matches that one bare
+// token (not combined with other flags or arguments) so it stays a narrow
+// compatibility shim rather than a second flag-parsing path competing with
+// cobra's own "--version" handling.
+func handleLegacyVersionFlag(args []string, out io.Writer) bool {
+	if len(args) != 1 || args[0] != "-version" {
+		return false
+	}
+	// Match repo convention: a write error to the version output stream
+	// isn't actionable here, so it's discarded rather than propagated.
+	_, _ = fmt.Fprintln(out, internal.Version)
+	return true
 }
 
 func newRoot() *cobra.Command {

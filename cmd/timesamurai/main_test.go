@@ -42,6 +42,32 @@ func TestRootVersion(t *testing.T) {
 	}
 }
 
+func TestLegacyDashVersion(t *testing.T) {
+	var out bytes.Buffer
+	if handled := handleLegacyVersionFlag([]string{"-version"}, &out); !handled {
+		t.Fatal("expected \"-version\" to be handled")
+	}
+	got := strings.TrimSpace(out.String())
+	if got != internal.Version {
+		t.Errorf("version = %q, want %q", got, internal.Version)
+	}
+}
+
+func TestLegacyDashVersionIgnoresOtherArgs(t *testing.T) {
+	for _, args := range [][]string{
+		nil,
+		{"--version"},
+		{"-version", "extra"},
+		{"work", "-version"},
+		{"-versionx"},
+	} {
+		var out bytes.Buffer
+		if handled := handleLegacyVersionFlag(args, &out); handled {
+			t.Errorf("args %v: expected not handled, got output %q", args, out.String())
+		}
+	}
+}
+
 func TestRootUnknownFlag(t *testing.T) {
 	root := newRoot()
 	var errOut bytes.Buffer
