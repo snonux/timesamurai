@@ -2,6 +2,8 @@
 
 # timesamurai
 
+![timesamurai](./logo-small.png)
+
 `timesamurai` is a JSONL-backed worktime tracking tool: it tracks work, breaks, and time off
 as an append-only JSONL log per host.
 

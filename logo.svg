@@ -24,14 +24,14 @@
     <g id="hand-long">
       <rect x="-3.5" y="4" width="7" height="20" rx="3.5" fill="#2a3242"/>
       <rect x="-11"  y="0" width="22" height="6" rx="3"   fill="#d9a441"/>
-      <path d="M -4.6 0 Q -5.6 -40 -4 -78 Q -2.4 -90 0 -96 Q 2.4 -90 4 -78 Q 5.6 -40 4.6 0 Z" fill="url(#steel)"/>
+      <path d="M -5.6 0 Q -6.8 -40 -4.8 -78 Q -2.8 -90 0 -96 Q 2.8 -90 4.8 -78 Q 6.8 -40 5.6 0 Z" fill="url(#steel)"/>
       <path d="M 0 -92 Q 1.5 -60 2 -22 L 2 -1 L 0.8 -1 Q 0.4 -46 0 -92 Z" fill="#ffffff" opacity="0.5"/>
     </g>
 
     <g id="hand-short">
       <rect x="-3.5" y="4" width="7" height="20" rx="3.5" fill="#2a3242"/>
       <rect x="-11"  y="0" width="22" height="6" rx="3"   fill="#d9a441"/>
-      <path d="M -4.6 0 Q -5.6 -26 -4 -52 Q -2.4 -62 0 -67 Q 2.4 -62 4 -52 Q 5.6 -26 4.6 0 Z" fill="url(#steel)"/>
+      <path d="M -5.6 0 Q -6.8 -26 -4.8 -52 Q -2.8 -62 0 -67 Q 2.8 -62 4.8 -52 Q 6.8 -26 5.6 0 Z" fill="url(#steel)"/>
       <path d="M 0 -63 Q 1.5 -42 2 -16 L 2 -1 L 0.8 -1 Q 0.4 -32 0 -63 Z" fill="#ffffff" opacity="0.5"/>
     </g>
 
@@ -43,8 +43,9 @@
        unclosed circle. Two arcs of different weight fake the taper a real
        brush leaves as it lifts. -->
   <g fill="none" stroke="url(#ink)" stroke-linecap="round" transform="rotate(128 128 128)">
-    <path d="M 128 34 A 94 94 0 1 1 61.5 61.5" stroke-width="15" opacity="0.96"/>
-    <path d="M 128 34 A 94 94 0 0 1 205 74"   stroke-width="9"  opacity="0.5"/>
+    <path d="M 128 34 A 94 94 0 1 1 61.5 61.5" stroke-width="17" opacity="0.97"/>
+    <path d="M 128 34 A 94 94 0 0 1 196 65"   stroke-width="10" opacity="0.55"/>
+    <path d="M 196 65 A 94 94 0 0 1 210 80"   stroke-width="5"  opacity="0.3"/>
   </g>
 
   <!-- Hour marks at 12/3/6/9, inside the ring. -->
