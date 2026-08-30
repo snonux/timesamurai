@@ -350,6 +350,30 @@ func TestCustomTagIsNotFoldedIntoWork(t *testing.T) {
 	}
 }
 
+func TestBuildReport_EmptyInputReturnsNoWeeksOrError(t *testing.T) {
+	// Pre-rewrite's BuildReport(nil, cfg) returned an empty report rather
+	// than erroring; report()'s Ruby equivalent would actually crash on an
+	// empty entries list (Time.at(nil) on the placeholder day/week it always
+	// flushes once), so an empty store deliberately isn't a byte-for-byte
+	// case — it's just the sane behavior for "nothing recorded yet".
+	weeks, err := BuildReport(nil, config.Default().Accounting, io.Discard)
+	if err != nil {
+		t.Fatalf("BuildReport(nil): %v", err)
+	}
+	if len(weeks) != 0 {
+		t.Fatalf("weeks len = %d, want 0", len(weeks))
+	}
+}
+
+func TestBuildReport_RejectsUnknownAction(t *testing.T) {
+	cfg := config.Default().Accounting
+	entries := []Entry{mkEntry(1, "mystery", epochAt(2024, 1, 2, 9, 0, 0), 0, WorkTag)}
+
+	if _, err := BuildReport(entries, cfg, io.Discard); err == nil {
+		t.Fatal("BuildReport() accepted unknown action, want error")
+	}
+}
+
 func TestFormatHoursRoundHalfEvenAndItsOneException(t *testing.T) {
 	cases := []struct {
 		seconds int64
