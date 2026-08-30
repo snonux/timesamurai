@@ -9,12 +9,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/snonux/timesamurai/internal/config"
+	"github.com/snonux/timesamurai/internal/pathutil"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -69,14 +69,14 @@ func loadConfigWithOverrides(ctx context.Context, cmd *cobra.Command) (config.Co
 	}
 
 	if db, _ := cmd.Flags().GetString("db"); db != "" {
-		expanded, err := expandHome(db)
+		expanded, err := pathutil.ExpandHome(db)
 		if err != nil {
 			return config.Config{}, err
 		}
 		cfg.Storage.DBDir = expanded
 	}
 	if store, _ := cmd.Flags().GetString("store"); store != "" {
-		expanded, err := expandHome(store)
+		expanded, err := pathutil.ExpandHome(store)
 		if err != nil {
 			return config.Config{}, err
 		}
@@ -106,24 +106,4 @@ func cmdContext(cmd *cobra.Command) context.Context {
 		return ctx
 	}
 	return context.Background()
-}
-
-// expandHome expands a leading "~" the same way internal/config does for
-// config.toml path fields, so --db/--store accept the same shorthand.
-// Duplicated rather than imported: config's version is unexported by design
-// (config_load.go's expandHome) and this ten-line helper is the only outside
-// caller, so exporting it from config purely for this would widen that
-// package's API for a single, tiny use.
-func expandHome(path string) (string, error) {
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	if path == "~" {
-		return home, nil
-	}
-	return filepath.Join(home, path[2:]), nil
 }

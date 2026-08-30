@@ -2,36 +2,11 @@ package cli
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
-
-func TestExpandHomeExpandsTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("os.UserHomeDir: %v", err)
-	}
-
-	cases := map[string]string{
-		"~":            home,
-		"~/foo/bar":    filepath.Join(home, "foo", "bar"),
-		"/absolute":    "/absolute",
-		"relative/dir": "relative/dir",
-	}
-	for in, want := range cases {
-		got, err := expandHome(in)
-		if err != nil {
-			t.Fatalf("expandHome(%q): %v", in, err)
-		}
-		if got != want {
-			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
 
 // TestLoadConfigWithOverridesAppliesDbAndStoreFlags is a white-box test
 // (same package) of the --db/--store precedence loadConfigWithOverrides

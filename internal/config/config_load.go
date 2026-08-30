@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/snonux/timesamurai/internal/pathutil"
 )
 
 // Load reads configuration from the TOML file (if present), merges TIMESAMURAI_*
@@ -96,7 +98,7 @@ func resolveConfigPath(override string) (string, error) {
 	if strings.TrimSpace(override) == "" {
 		return ConfigPath()
 	}
-	expanded, err := expandHome(override)
+	expanded, err := pathutil.ExpandHome(override)
 	if err != nil {
 		return "", fmt.Errorf("expand config path %q: %w", override, err)
 	}
@@ -236,34 +238,17 @@ func (c *Config) normalize() error {
 	if strings.TrimSpace(c.Storage.StoreDir) == "" {
 		c.Storage.StoreDir = c.Storage.DBDir
 	}
-	dbDir, err := expandHome(c.Storage.DBDir)
+	dbDir, err := pathutil.ExpandHome(c.Storage.DBDir)
 	if err != nil {
 		return fmt.Errorf("expand storage.db_dir %q: %w", c.Storage.DBDir, err)
 	}
-	storeDir, err := expandHome(c.Storage.StoreDir)
+	storeDir, err := pathutil.ExpandHome(c.Storage.StoreDir)
 	if err != nil {
 		return fmt.Errorf("expand storage.store_dir %q: %w", c.Storage.StoreDir, err)
 	}
 	c.Storage.DBDir = dbDir
 	c.Storage.StoreDir = storeDir
 	return nil
-}
-
-func expandHome(path string) (string, error) {
-	if path == "" {
-		return "", nil
-	}
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	if path == "~" {
-		return home, nil
-	}
-	return filepath.Join(home, path[2:]), nil
 }
 
 func stringPtr(s string) *string { return &s }

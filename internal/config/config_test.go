@@ -583,30 +583,6 @@ func TestMerge_PartialSectionsPreserveDefaults(t *testing.T) {
 	}
 }
 
-func TestExpandHome(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tests := []struct {
-		in, want string
-	}{
-		{"", ""},
-		{"/abs/path", "/abs/path"},
-		{"~", home},
-		{"~/foo/bar", filepath.Join(home, "foo/bar")},
-	}
-	for _, tt := range tests {
-		got, err := expandHome(tt.in)
-		if err != nil {
-			t.Fatalf("expandHome(%q): %v", tt.in, err)
-		}
-		if got != tt.want {
-			t.Fatalf("expandHome(%q)=%q want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
 func TestDefaultConfigPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
