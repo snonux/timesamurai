@@ -38,6 +38,12 @@ func NewWorkCmd() *cobra.Command {
 		newSubCmd(),
 		newUseBufferCmd(),
 		newDayOffCmd(),
+		// x61: reporting/querying verbs, all read-only and all built on
+		// worktime/query.go + report.go rather than reimplementing
+		// filtering or rendering here.
+		newReportCmd(),
+		newListCmd(),
+		newSearchCmd(),
 	)
 	return cmd
 }
