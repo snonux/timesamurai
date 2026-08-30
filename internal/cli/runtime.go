@@ -63,7 +63,22 @@ func newRuntime(cmd *cobra.Command) (*runtime, error) {
 // flags exist specifically so commands -- and tests -- can point at a
 // scratch directory without touching the real config or ~/git/worktime.
 func loadConfigWithOverrides(ctx context.Context, cmd *cobra.Command) (config.Config, error) {
-	cfg, err := config.Load(ctx, config.LoadOptions{NoticeWriter: cmd.ErrOrStderr()})
+	// --config is a persistent flag on the root command, so it is only
+	// present here once cobra has merged inherited flags; a work command
+	// built standalone in a test has no such parent and simply gets "".
+	configPath, _ := cmd.Flags().GetString("config")
+	if configPath != "" {
+		expanded, err := pathutil.ExpandHome(configPath)
+		if err != nil {
+			return config.Config{}, err
+		}
+		configPath = expanded
+	}
+
+	cfg, err := config.Load(ctx, config.LoadOptions{
+		ConfigPath:   configPath,
+		NoticeWriter: cmd.ErrOrStderr(),
+	})
 	if err != nil {
 		return config.Config{}, fmt.Errorf("load config: %w", err)
 	}

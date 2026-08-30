@@ -28,7 +28,7 @@ authoritative list of options and comments lives in the example file.
 
 Highest first:
 
-1. Command-line flags (`--config`, and later `--store` / `--db`)
+1. Command-line flags: `--config` (root, selects the config file), then `--store` / `--db` on `work`
 2. `TIMESAMURAI_*` environment variables
 3. `config.toml`
 4. Built-in defaults

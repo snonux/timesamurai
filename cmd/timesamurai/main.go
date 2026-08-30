@@ -54,6 +54,19 @@ func newRoot() *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	// Define the version flag ourselves so cobra's InitDefaultVersionFlag
+	// skips it and does not claim the "-v" shorthand. worktime.rb uses -v
+	// for --verbose, and the work subcommands keep that meaning, so leaving
+	// -v as an alias for --version here would make the same letter mean two
+	// different things one level apart.
+	root.Flags().Bool("version", false, "version for timesamurai")
+
+	// --config selects an alternative config.toml. config.LoadOptions has
+	// carried ConfigPath since the config rewrite; this is the flag that
+	// finally reaches it, matching the precedence documented in
+	// docs/configuration.md (flags beat TIMESAMURAI_* beat the file).
+	root.PersistentFlags().String("config", "", "path to config.toml (default: $XDG_CONFIG_HOME/timesamurai/config.toml)")
+
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newCompletionCmd())
 	root.AddCommand(cli.NewWorkCmd())

@@ -128,3 +128,48 @@ func TestCompletionUnsupported(t *testing.T) {
 		t.Fatal("expected error for unsupported shell")
 	}
 }
+
+// TestRootConfigFlag guards the flag that docs/configuration.md names as the
+// highest-precedence config source. config.LoadOptions has always carried
+// ConfigPath; the flag reaching it is what makes the documented precedence
+// true, so its absence was a documentation/behaviour mismatch rather than a
+// missing feature.
+func TestRootConfigFlag(t *testing.T) {
+	root := newRoot()
+	flag := root.PersistentFlags().Lookup("config")
+	if flag == nil {
+		t.Fatal("--config not registered on the root command")
+	}
+	if flag.Shorthand != "" {
+		t.Errorf("--config shorthand = %q, want none", flag.Shorthand)
+	}
+
+	// Inherited by subcommands, which is where it is actually read.
+	work, _, err := root.Find([]string{"work"})
+	if err != nil {
+		t.Fatalf("find work command: %v", err)
+	}
+	if work.InheritedFlags().Lookup("config") == nil {
+		t.Error("work does not inherit --config from root")
+	}
+}
+
+// TestVersionFlagDoesNotClaimShorthandV keeps "-v" meaning --verbose across
+// the tool. worktime.rb uses -v for verbose and the work subcommands keep
+// that, so cobra's default of binding -v to --version would make the same
+// letter mean two different things one level apart.
+func TestVersionFlagDoesNotClaimShorthandV(t *testing.T) {
+	root := newRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute(--version): %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != internal.Version {
+		t.Fatalf("--version printed %q, want %q", got, internal.Version)
+	}
+	if sh := root.Flags().ShorthandLookup("v"); sh != nil {
+		t.Errorf("-v is bound to %q on root; it must stay free for --verbose", sh.Name)
+	}
+}

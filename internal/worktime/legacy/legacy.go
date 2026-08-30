@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -217,7 +218,10 @@ func LoadLegacyHost(ctx context.Context, dbDir, hostname string) (LegacyDB, erro
 		return LegacyDB{}, errors.New("db directory must not be empty")
 	}
 
-	dbFile := filepath.Join(dbDir, legacyDBFileName(host))
+	dbFile, err := resolveLegacyHostFile(ctx, dbDir, host)
+	if err != nil {
+		return LegacyDB{}, err
+	}
 	db, err := loadLegacyFile(dbFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -266,6 +270,24 @@ func SaveLegacyHost(ctx context.Context, dbDir, hostname string, db LegacyDB) er
 	sortLegacyEntries(prepared)
 	db.Entries[host] = prepared
 
+	dbFile, err := resolveLegacyHostFile(ctx, dbDir, host)
+	if err != nil {
+		return err
+	}
+
+	// When the owning file holds other hosts too (db.archive.json carries
+	// both mc-lon-mb8477 and galaxytabs6), keep their sections untouched:
+	// this call only ever replaces one host's section.
+	if existing, err := loadLegacyFile(dbFile); err == nil {
+		for otherHost, entries := range existing.Entries {
+			if otherHost != host {
+				db.Entries[otherHost] = entries
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
 	data, err := json.MarshalIndent(db, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode database for host %q: %w", host, err)
@@ -275,8 +297,7 @@ func SaveLegacyHost(ctx context.Context, dbDir, hostname string, db LegacyDB) er
 		return fmt.Errorf("create db directory %q: %w", dbDir, err)
 	}
 
-	dbFile := filepath.Join(dbDir, legacyDBFileName(host))
-	tmp, err := os.CreateTemp(dbDir, legacyDBFileName(host)+".*.tmp")
+	tmp, err := os.CreateTemp(dbDir, filepath.Base(dbFile)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temp db file for host %q: %w", host, err)
 	}
@@ -300,7 +321,16 @@ func prepareLegacyEntry(entry LegacyEntry, host string) LegacyEntry {
 	if strings.TrimSpace(entry.Source) == "" {
 		entry.Source = host
 	}
-	entry.Human = FormatLegacyHuman(entry.Epoch)
+	// Derive Human only when it is not already carried over from the
+	// existing on-disk file. worktime.rb writes "human" once at insert and
+	// never rewrites it, so historical entries hold the local time of the
+	// machine that logged them -- entries logged on the London hosts read
+	// two hours earlier than the same epoch rendered in Europe/Sofia today.
+	// Re-deriving every entry would silently restate that history and churn
+	// thousands of lines in git on each export. See carryOverHuman.
+	if strings.TrimSpace(entry.Human) == "" {
+		entry.Human = FormatLegacyHuman(entry.Epoch)
+	}
 	if strings.EqualFold(strings.TrimSpace(entry.Action), worktime.ActionAdd) {
 		entry.valueSet = true
 	}
@@ -377,4 +407,49 @@ func writeJSONString(buf *bytes.Buffer, key, value string, leadingComma bool) er
 	buf.WriteByte(':')
 	buf.Write(valJSON)
 	return nil
+}
+
+// resolveLegacyHostFile returns the db.*.json file that owns host's section.
+//
+// worktime.rb's usual layout is one file per host, but that is a convention
+// rather than a rule: db.archive.json carries both mc-lon-mb8477 (4404
+// entries) and galaxytabs6 (6). worktime.rb globs db.*.json and merges every
+// section it finds, so exporting such a host to a fresh db.<host>.json while
+// the original multi-host file is still on disk would present the same
+// entries twice -- doubling those weeks' hours and desynchronising the
+// login/logout pairing until the report aborts with "Not logged in".
+//
+// So: prefer the canonical db.<host>.json when it exists, otherwise adopt
+// whichever existing file already declares the host, and only fall back to
+// the canonical name when no file claims it (a genuinely new host).
+func resolveLegacyHostFile(ctx context.Context, dbDir, host string) (string, error) {
+	canonical := filepath.Join(dbDir, legacyDBFileName(host))
+	if _, err := os.Stat(canonical); err == nil {
+		return canonical, nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat db file %q: %w", canonical, err)
+	}
+
+	dbFiles, err := filepath.Glob(filepath.Join(dbDir, legacyDBFilePattern))
+	if err != nil {
+		return "", fmt.Errorf("glob databases in %q: %w", dbDir, err)
+	}
+	sort.Strings(dbFiles)
+
+	for _, dbFile := range dbFiles {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		db, err := loadLegacyFile(dbFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", err
+		}
+		if _, ok := db.Entries[host]; ok {
+			return dbFile, nil
+		}
+	}
+	return canonical, nil
 }

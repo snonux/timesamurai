@@ -38,6 +38,25 @@ Storage layout, once `work migrate` has run:
 | JSONL store | `db.<host>.jsonl` in `storage.store_dir` (default `~/git/worktime/timesamuraidb`) | `timesamurai work`, source of truth |
 | Undo log | `undo.<host>.jsonl` in `storage.store_dir` | `timesamurai work` only |
 
+### Legacy files that hold more than one host
+
+`worktime.rb`'s one-file-per-host layout is a convention, not a rule:
+`db.archive.json` carries both `mc-lon-mb8477` (4,404 entries) and
+`galaxytabs6` (6). Since `worktime.rb` globs `db.*.json` and merges every
+section it finds, export deliberately writes such a host **back into the file
+that already owns it** rather than creating a fresh `db.<host>.json`. Creating
+one would leave the same entries visible twice, doubling those weeks' hours and
+desynchronising login/logout pairing until the report aborts with
+`Not logged in`.
+
+Two consequences worth knowing:
+
+* `db.archive.json` keeps its name and both sections after migration.
+* Its entries predate `worktime.rb` writing a `source` field, so the first
+  export adds one to each. That is a one-time normalisation of an archive that
+  never changes again; `human` values are preserved verbatim, so no historical
+  timestamp is restated.
+
 ### worktime.rb is report-only after migration
 
 `work migrate` (`internal/cli/migrate.go`) is a one-shot, one-way import: legacy

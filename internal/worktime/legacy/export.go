@@ -96,6 +96,7 @@ func ExportHost(ctx context.Context, store *worktime.Store, dbDir, host string, 
 	}
 
 	fresh := buildFreshLegacyEntries(host, store.Entries(host))
+	carryOverHuman(onDisk.Entries[host], fresh)
 	discarded := discardedLegacyEntries(onDisk.Entries[host], fresh)
 	if len(discarded) > 0 {
 		if opts.Strict {
@@ -266,4 +267,44 @@ func describeLegacyEntry(e LegacyEntry) string {
 		desc += fmt.Sprintf(" descr=%q", e.Descr)
 	}
 	return desc
+}
+
+// carryOverHuman copies each on-disk entry's "human" string onto the
+// content-identical fresh entry before writing.
+//
+// "human" is a display field: worktime.rb sets it once from the local clock
+// at insert time and never touches it again, so the historical files record
+// the timezone each entry was logged in -- 2020 entries from the London
+// hosts read two hours earlier than the same epoch formatted in Europe/Sofia
+// today. Regenerating it for every entry would restate that history and
+// rewrite ~29% of the lines in every db.<host>.json on the first export,
+// burying real changes in derived-field churn.
+//
+// Matching uses the same content key and multiset accounting as
+// discardedLegacyEntries, so an entry whose epoch changed via "work modify"
+// finds no match and correctly gets a freshly derived timestamp. Entries
+// with no counterpart on disk (new ones) are left blank for
+// prepareLegacyEntry to fill in.
+func carryOverHuman(onDisk, fresh []LegacyEntry) {
+	if len(onDisk) == 0 {
+		return
+	}
+
+	available := make(map[string][]string, len(onDisk))
+	for _, e := range onDisk {
+		if human := strings.TrimSpace(e.Human); human != "" {
+			key := legacyEntryKey(e)
+			available[key] = append(available[key], e.Human)
+		}
+	}
+
+	for i := range fresh {
+		key := legacyEntryKey(fresh[i])
+		queued := available[key]
+		if len(queued) == 0 {
+			continue
+		}
+		fresh[i].Human = queued[0]
+		available[key] = queued[1:]
+	}
 }
