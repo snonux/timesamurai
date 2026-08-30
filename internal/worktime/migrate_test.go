@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/snonux/timesamurai/internal/config"
 )
 
 // Real-data reminders (not loaded here — fixtures stay small):
@@ -334,6 +337,75 @@ func TestMigrate_ForceAfterDeleteReusesWatermarkNotOne(t *testing.T) {
 	}
 	if err := reopened.Append(ctx, Entry{ID: next, Action: "logout", Epoch: 3000, Host: "earth", Tags: []string{"work"}}); err != nil {
 		t.Fatalf("Append after force migrate: %v", err)
+	}
+}
+
+// TestMigrate_QuarantinesUnknownAction is the regression test for task 781:
+// a legacy row with an unrecognized action (e.g. a typo'd "bogus") used to
+// migrate cleanly into the store and only blow up later, opaquely, when
+// someone ran `work report` ("unknown action bogus"). Migrate must instead
+// surface a FindingUnknownAction finding immediately and never write the
+// bad row, so the store stays report-safe straight after migration.
+func TestMigrate_QuarantinesUnknownAction(t *testing.T) {
+	ctx := context.Background()
+	dbDir := t.TempDir()
+	storeDir := t.TempDir()
+
+	raw := `{
+  "entries": {
+    "earth": [
+      {"action":"login","what":"work","epoch":100,"source":"earth","human":"a"},
+      {"action":"bogus","what":"work","epoch":150,"source":"earth","human":"a"},
+      {"action":"logout","what":"work","epoch":200,"source":"earth","human":"a"}
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dbDir, "db.earth.json"), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var report bytes.Buffer
+	result, err := Migrate(ctx, dbDir, storeDir, MigrateOptions{Report: &report})
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	// Only the two valid rows (login, logout) are imported; the bogus-action
+	// row is quarantined, not counted as an entry.
+	if result.Entries != 2 {
+		t.Fatalf("Entries = %d, want 2 (bogus action must be quarantined, not imported)", result.Entries)
+	}
+
+	kinds := findingKindCounts(result.Findings)
+	if kinds[FindingUnknownAction] != 1 {
+		t.Fatalf("unknown-action findings = %d, want 1; findings=%v", kinds[FindingUnknownAction], result.Findings)
+	}
+	bad := findFinding(result.Findings, FindingUnknownAction)
+	if bad.Action != "bogus" || bad.Epoch != 150 {
+		t.Fatalf("unknown-action finding = %+v, want action=bogus epoch=150", bad)
+	}
+	if !strings.Contains(report.String(), FindingUnknownAction) || !strings.Contains(report.String(), "bogus") {
+		t.Fatalf("report missing unknown-action finding:\n%s", report.String())
+	}
+
+	store, err := Open(ctx, storeDir)
+	if err != nil {
+		t.Fatalf("Open store: %v", err)
+	}
+	earth := store.Entries("earth")
+	if len(earth) != 2 {
+		t.Fatalf("earth entries = %d, want 2", len(earth))
+	}
+	for _, e := range earth {
+		if e.Action == "bogus" {
+			t.Fatalf("store must not contain the quarantined bogus-action entry: %+v", earth)
+		}
+	}
+
+	// The store must now be report-safe: BuildReport must not fail with
+	// "unknown action" the way it did before this fix quarantined the row.
+	if _, err := BuildReport(earth, config.Default().Accounting, io.Discard); err != nil {
+		t.Fatalf("BuildReport after migrate: %v", err)
 	}
 }
 

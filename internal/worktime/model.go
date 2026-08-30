@@ -110,6 +110,21 @@ func ValidateTags(cfg config.AccountingConfig, tags []string) error {
 	return err
 }
 
+// isValidAction reports whether action (already lowercased/trimmed by the
+// caller) is one of the three actions the store and reporter understand.
+// Shared by ValidateEntry (live inserts/patches, via insertEntry/patchEntry)
+// and by migrate's legacy import, so a row that BuildReport would reject
+// with "unknown action" is caught at the same place for both entry points
+// instead of only surfacing later when a report is built (task 781).
+func isValidAction(action string) bool {
+	switch action {
+	case actionLogin, actionLogout, actionAdd:
+		return true
+	default:
+		return false
+	}
+}
+
 // ValidateEntry checks required fields and tag accounting rules.
 func ValidateEntry(cfg config.AccountingConfig, entry Entry) error {
 	if entry.ID <= 0 {
@@ -122,9 +137,7 @@ func ValidateEntry(cfg config.AccountingConfig, entry Entry) error {
 	}
 
 	action := strings.ToLower(strings.TrimSpace(entry.Action))
-	switch action {
-	case actionLogin, actionLogout, actionAdd:
-	default:
+	if !isValidAction(action) {
 		return fmt.Errorf("unsupported action %q", entry.Action)
 	}
 

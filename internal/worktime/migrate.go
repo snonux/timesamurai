@@ -16,11 +16,18 @@ import (
 // that a non-force migration would overwrite.
 var ErrAlreadyMigrated = errors.New("already migrated")
 
-// Finding kinds reported during migration (imported, never silently dropped).
+// Finding kinds reported during migration. FindingUnpairedLogin,
+// FindingZeroValueAdd and FindingNegativeValue describe rows that are
+// imported as-is (the data is odd but still meaningful to a report).
+// FindingUnknownAction is different: the row is quarantined — left out of
+// the entries written to the store — because BuildReport has no case for
+// it and would otherwise fail on "unknown action" only once someone runs
+// `work report`, long after the poisoned row was migrated in (task 781).
 const (
 	FindingUnpairedLogin = "unpaired-login"
 	FindingZeroValueAdd  = "zero-value-add"
 	FindingNegativeValue = "negative-value"
+	FindingUnknownAction = "unknown-action"
 )
 
 // MigrateOptions configures a one-shot legacy JSON → JSONL import.
@@ -76,6 +83,11 @@ type MigrateResult struct {
 // A Force run replaces a host's file outright, but ids are still numbered
 // from that host's current watermark (not always from 1), so a prior delete
 // or undo-elevated watermark never collides with the store's id-reuse guard.
+//
+// A row with an unrecognized action (e.g. a typo'd "bogus") is quarantined:
+// it is reported as a FindingUnknownAction finding but never written to the
+// store, so a poisoned legacy row can't reach BuildReport's "unknown action"
+// failure by way of a clean-looking migrate (task 781).
 //
 // Real-data cases (see ~/git/worktime; covered synthetically in testdata/migrate):
 //   - one unpaired/superseded earth login at epoch 1781618168 (4377 logins vs 4376 logouts)
@@ -154,8 +166,9 @@ func migrateOneHost(ctx context.Context, store *Store, host string, legacyEntrie
 	if err != nil {
 		return nil, nil, fmt.Errorf("next id for host %q: %w", host, err)
 	}
-	entries := convertLegacyHost(host, legacyEntries, startID)
+	entries, quarantined := convertLegacyHost(host, legacyEntries, startID)
 	findings := collectMigrateFindings(host, legacyEntries, entries)
+	findings = append(quarantined, findings...)
 
 	if err := store.ReplaceHost(ctx, host, entries); err != nil {
 		return nil, nil, fmt.Errorf("write host %q: %w", host, err)
@@ -227,14 +240,43 @@ func refuseIfAlreadyMigrated(storeDir string, hosts []string) error {
 // watermark instead of always from 1 keeps a Force re-migrate compatible
 // with replaceHostLocked's id-reuse guard even after prior deletes have
 // left gaps below the watermark.
-func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) []Entry {
+//
+// A row whose action isValidAction rejects (e.g. a typo like "bogus") is
+// quarantined instead of converted: it is left out of the returned entries
+// and reported as a FindingUnknownAction finding instead. Previously such
+// rows were imported unchecked and only surfaced later as a hard failure
+// from BuildReport ("unknown action"), by which point the store already
+// held the bad row and the only fix was manual JSONL surgery (task 781).
+// Ids are only consumed by rows that are actually kept, so quarantining a
+// row never leaves a gap that later confuses the id-reuse guard.
+func convertLegacyHost(host string, legacyEntries []LegacyEntry, startID int64) ([]Entry, []MigrateFinding) {
 	out := make([]Entry, 0, len(legacyEntries))
-	for i, leg := range legacyEntries {
-		out = append(out, legacyToEntry(startID+int64(i), host, leg))
+	var quarantined []MigrateFinding
+	nextID := startID
+
+	for _, leg := range legacyEntries {
+		action := strings.ToLower(strings.TrimSpace(leg.Action))
+		if !isValidAction(action) {
+			quarantined = append(quarantined, MigrateFinding{
+				Kind:   FindingUnknownAction,
+				Host:   host,
+				Epoch:  leg.Epoch,
+				Action: leg.Action,
+				Tag:    strings.TrimSpace(leg.What),
+				Detail: fmt.Sprintf("quarantined: unknown action %q not imported", leg.Action),
+			})
+			continue
+		}
+		out = append(out, legacyToEntry(nextID, host, leg))
+		nextID++
 	}
-	return out
+	return out, quarantined
 }
 
+// legacyToEntry converts one legacy row into a store Entry. The caller
+// (convertLegacyHost) must have already confirmed the action is valid;
+// legacyToEntry itself no longer re-checks it since that check now decides
+// whether the row is converted at all.
 func legacyToEntry(id int64, host string, leg LegacyEntry) Entry {
 	entry := Entry{
 		ID:     id,
