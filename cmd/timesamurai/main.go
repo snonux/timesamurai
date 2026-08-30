@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/snonux/timesamurai/internal"
+	"github.com/snonux/timesamurai/internal/cli"
 )
 
 func main() {
@@ -30,6 +31,7 @@ func newRoot() *cobra.Command {
 	}
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newCompletionCmd())
+	root.AddCommand(cli.NewWorkCmd())
 	return root
 }
 

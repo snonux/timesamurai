@@ -1,0 +1,43 @@
+package cli
+
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/snonux/timesamurai/internal/worktime"
+)
+
+// NewWorkCmd builds the "timesamurai work" command group: tracking
+// (start/stop/status), crediting (add/sub/usebuffer/day-off), and the
+// hidden login/logout aliases task w61 asks to keep. Sibling tasks add
+// further subcommands to the tree this returns -- x61 (report/list/search),
+// y61 (modify/delete/undo/edit), z61 (migrate/export/import), and 071 (the
+// worktime.rb flag shim in worklegacy.go) -- so the persistent --db/--store/
+// --verbose flags and the newRuntime helper live here rather than per verb,
+// for every future subcommand to reuse without re-deriving them.
+func NewWorkCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "work",
+		Short: "Track and adjust worked time",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	cmd.PersistentFlags().String("db", "", "override the legacy worktime.rb JSON directory (storage.db_dir)")
+	cmd.PersistentFlags().String("store", "", "override the JSONL store directory (storage.store_dir)")
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "print full entry details instead of a one-line confirmation")
+
+	cmd.AddCommand(
+		newSessionCmd("start", "Open a work session", false, "start", worktime.Start),
+		newSessionCmd("login", "", true, "start", worktime.Start),
+		newSessionCmd("stop", "Close a work session", false, "stop", worktime.Stop),
+		newSessionCmd("logout", "", true, "stop", worktime.Stop),
+		newStatusCmd(),
+		newAddCmd(),
+		newSubCmd(),
+		newUseBufferCmd(),
+		newDayOffCmd(),
+	)
+	return cmd
+}
