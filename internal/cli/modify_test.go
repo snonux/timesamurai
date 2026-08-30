@@ -183,3 +183,39 @@ func TestModifyVerboseShowsUpdatedEntry(t *testing.T) {
 		t.Errorf("--verbose output missing updated descr, got %q", out)
 	}
 }
+
+// TestModifyRefusesNoOp covers what someone hits when they reach for
+// `work modify <addr>` to find out what it takes. It used to succeed
+// silently, rewriting the entry identically and leaving a no-op record in
+// the undo log. The shell only offers the field flags once a "-" is typed,
+// so an error naming them is the discoverable path.
+func TestModifyRefusesNoOp(t *testing.T) {
+	store := newScratchStore(t)
+	addr := addOneEntry(t, store)
+
+	_, err := runWork(t, store, "modify", addr)
+	if err == nil {
+		t.Fatal("modify with no field flags succeeded; want an error")
+	}
+	for _, want := range []string{"nothing to change", "--at", "--value", "--descr", "--action", "--tags"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q; got: %v", want, err)
+		}
+	}
+
+	// --verbose is not a change either: it only affects what is printed.
+	if _, err := runWork(t, store, "modify", addr, "--verbose"); err == nil {
+		t.Error("modify --verbose alone succeeded; want an error")
+	}
+
+	// The entry must be untouched, and no undo record left behind.
+	entries := readEntries(t, store, currentHost(t))
+	if len(entries) != 1 || entries[0].Descr != "original" {
+		t.Errorf("entry was disturbed by the refused modify: %+v", entries)
+	}
+
+	// A real field flag still works.
+	if _, err := runWork(t, store, "modify", addr, "--value", "2h"); err != nil {
+		t.Errorf("modify --value: %v", err)
+	}
+}

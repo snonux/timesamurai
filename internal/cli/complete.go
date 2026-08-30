@@ -108,6 +108,18 @@ func completeTags(cmd *cobra.Command, _ []string, toComplete string) ([]cobra.Co
 // showing its date and description -- so a caller picking an address from
 // shell tab-completion sees enough to tell entries apart without first
 // running `work list`.
+// completeSingleHostIDAddress is completeHostIDAddress for commands taking
+// exactly one address (modify). Once that slot is filled it offers nothing,
+// so the shell falls through to flag completion instead of listing another
+// 200 addresses -- which would imply more than one is accepted and hide the
+// fact that --at/--value/--descr/--tags/--action are what comes next.
+func completeSingleHostIDAddress(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return completeHostIDAddress(cmd, args, toComplete)
+}
+
 func completeHostIDAddress(cmd *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	rt, err := newRuntime(cmd)
 	if err != nil {
