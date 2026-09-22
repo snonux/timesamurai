@@ -325,16 +325,36 @@ func TestLogoutWithoutLoginSkipsAndWarns(t *testing.T) {
 	}
 }
 
-func TestThreeTrailingNewlinesPerWeekBlock(t *testing.T) {
+func TestOneBlankLineBetweenWeekBlocks(t *testing.T) {
 	cfg := testAccountingConfig()
 	entries := []Entry{mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag)}
 
 	_, out := buildAndFormat(t, cfg, entries)
-	if !strings.HasSuffix(out, "\n\n\n") {
-		t.Fatalf("expected exactly three trailing newlines, got tail %q", out[len(out)-6:])
+	if !strings.HasSuffix(out, "\n\n") {
+		t.Fatalf("expected exactly two trailing newlines, got tail %q", out[len(out)-6:])
 	}
-	if strings.HasSuffix(out, "\n\n\n\n") {
-		t.Fatalf("expected exactly three trailing newlines, found a fourth")
+	if strings.HasSuffix(out, "\n\n\n") {
+		t.Fatalf("expected exactly one blank line after a week block, found two")
+	}
+}
+
+// TestSingleBlankLineBetweenWeeksInMultiWeekReport checks the actual task
+// m9 requirement: BETWEEN consecutive weeks, not just at the end.
+func TestSingleBlankLineBetweenWeeksInMultiWeekReport(t *testing.T) {
+	cfg := testAccountingConfig()
+	entries := []Entry{
+		mkEntry(1, ActionAdd, epochAt(2024, 1, 2, 9, 0, 0), secondsPerHour, WorkTag),
+		mkEntry(2, ActionAdd, epochAt(2024, 1, 9, 9, 0, 0), secondsPerHour, WorkTag),
+	}
+
+	_, out := buildAndFormat(t, cfg, entries)
+	// Between weeks: the totals line's terminating "\n" plus one blank
+	// line, then the next week's day line ("   ...").
+	if !strings.Contains(out, "\n\n   ") {
+		t.Fatalf("expected a blank line between week blocks, got:\n%q", out)
+	}
+	if strings.Contains(out, "\n\n\n") {
+		t.Fatalf("found a double blank line between week blocks")
 	}
 }
 

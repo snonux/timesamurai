@@ -16,6 +16,9 @@ import (
 // (task 271) compares this package's output directly against
 // `ruby worktime.rb --report`. Every quirk below is deliberate, not an
 // oversight — see the comment at its implementation for the reasoning.
+// One cosmetic divergence is deliberate by user request (task m9):
+// FormatReport separates week blocks with one blank line instead of
+// Ruby's two; the golden-diff test normalizes for that before comparing.
 
 const (
 	secondsPerHour = int64(3600)
@@ -207,10 +210,12 @@ func BuildReport(entries []Entry, cfg AccountingConfig, warn io.Writer) ([]WeekR
 	return state.weeks, nil
 }
 
-// FormatReport renders weeks exactly as report()'s print loop: each day
-// line, the 48-'=' separator, one totals line, then three newlines (the
-// totals line's own trailing "\n" plus two further blank `print "\n"`
-// calls) before the next week's days begin.
+// FormatReport renders weeks the way report()'s print loop does, with one
+// deliberate cosmetic divergence from worktime.rb (task m9): each day
+// line, the 48-'=' separator, one totals line, then two newlines (the
+// totals line's own trailing "\n" plus one further blank `print "\n"`
+// equivalent) before the next week's days begin — a single blank line
+// between weeks instead of Ruby's two.
 func FormatReport(weeks []WeekReport, verbose bool) string {
 	var out strings.Builder
 	for _, week := range weeks {
@@ -220,7 +225,7 @@ func FormatReport(weeks []WeekReport, verbose bool) string {
 		out.WriteString(weekSeparator)
 		writeCategoryValues(&out, week.Values)
 		writeValue(&out, "buffer", week.Buffer)
-		out.WriteString("\n\n\n")
+		out.WriteString("\n\n")
 	}
 	return out.String()
 }

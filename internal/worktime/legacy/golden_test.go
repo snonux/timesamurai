@@ -134,7 +134,10 @@ func migrateScratchStore(t *testing.T, ctx context.Context, dbDir string) *workt
 // TestGolden_ReportMatchesRubyByteForByte migrates a scratch copy of the
 // real db.*.json files into a JSONL store, renders the report through this
 // package's own BuildReport/FormatReport, and diffs it byte-for-byte
-// against testdata/report.golden.
+// against testdata/report.golden, normalizing for the one deliberate
+// cosmetic divergence (task m9): FormatReport separates week blocks with
+// a single blank line where Ruby prints two, so the Ruby-captured golden
+// is transformed the same way before comparison.
 //
 // report.golden is a `ruby worktime.rb --report` run captured once
 // (2026-08-30, ruby 4.0.6, against this exact dataset) and committed here to
@@ -165,7 +168,11 @@ func TestGolden_ReportMatchesRubyByteForByte(t *testing.T) {
 		t.Fatalf("read testdata/report.golden: %v", err)
 	}
 
-	if got != string(want) {
+	// Task m9: one blank line between weeks instead of Ruby's two.
+	// No run of four or more newlines exists in the golden (verified), so
+	// this replace is exactly the separator normalization FormatReport does.
+	wantStr := strings.ReplaceAll(string(want), "\n\n\n", "\n\n")
+	if got != wantStr {
 		t.Fatalf("report diverged from testdata/report.golden (got %d bytes, want %d bytes) -- "+
 			"see this test's doc comment before regenerating the golden file",
 			len(got), len(want))
