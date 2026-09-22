@@ -17,7 +17,7 @@ import (
 // storage rather than reaching into package state.
 func addAtDescrFlags(cmd *cobra.Command, at, descr *string) {
 	cmd.Flags().StringVar(at, "at", "",
-		"time for the entry: clock time, today/yesterday, ISO-8601, or relative like -2h (default now)")
+		"time for the entry: clock time, today/yesterday/tomorrow/now, next/this/last <weekday>, bare weekday names, '<n> days/weeks/months/years ago', ISO-8601, or relative like -2h (default now)")
 	cmd.Flags().StringVarP(descr, "descr", "d", "", "free-text description for the entry")
 }
 

@@ -37,7 +37,10 @@ var localLayouts = []localLayout{
 // --until uses this to turn a day-granularity result into that day's last
 // instant instead of its first midnight, so the flag's documented "inclusive
 // upper bound" promise holds the same way it already does for --at/--since
-// and for positional ranges (ParseRange's End.Add(-1ns)).
+// and for positional ranges (ParseRange's End.Add(-1ns)). Day-granularity
+// values include the today/yesterday/tomorrow keywords, the relative day
+// phrases of relative.go (weekday phrases, "<n> days ago"), and bare
+// YYYY-MM-DD dates.
 type timeGranularity int
 
 const (
@@ -67,8 +70,10 @@ func ParseUntil(value string) (time.Time, error) {
 }
 
 // ParseUntilAt behaves like ParseTimeAt but treats a day-granularity result
-// (today, yesterday, or a bare YYYY-MM-DD date) as spanning that whole day,
-// returning its last nanosecond instead of its midnight start. Instant
+// (today, yesterday, tomorrow, weekday phrases such as "next monday" or
+// "last friday", "<n> days ago" forms, or a bare YYYY-MM-DD date) as
+// spanning that whole day, returning its last nanosecond instead of its
+// midnight start. Instant
 // values (clock times, datetimes with a time-of-day, RFC3339, epoch seconds,
 // relative offsets) are returned unchanged, since they already name a
 // specific moment and must keep meaning exactly that moment.
@@ -100,6 +105,13 @@ func parseTimeAtGranular(value string, now time.Time) (time.Time, timeGranularit
 		return startOfDay(now), dayGranularity, nil
 	case "yesterday":
 		return startOfDay(now.AddDate(0, 0, -1)), dayGranularity, nil
+	}
+
+	// Task o9: human phrases like "next monday", "last friday", "tomorrow",
+	// "now", and "two days ago" (see relative.go for the full set and the
+	// deliberate scope limits).
+	if t, granularity, ok := parseRelativeDayPhrase(lower, now); ok {
+		return t, granularity, nil
 	}
 
 	if hour, min, sec, ok := parseClock(trimmed); ok {
