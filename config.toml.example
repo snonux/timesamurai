@@ -30,5 +30,23 @@ hostname = ""                  # override the detected hostname
 auto_worktime_login = false
 
 [report]
-color = true
+color = true                 # master switch for all terminal colors
 verbose = false
+
+# [colors] remaps which style each role uses; the defaults live in
+# internal/ansi. Styles: black..white, brightblack..brightwhite, default,
+# plus bold, faint, italic, underline (space-joined, e.g. "bold red").
+# All colors turn off with report.color = false, the TIMESAMURAI_COLOR env
+# var, the --no-color flag, or a NO_COLOR environment variable; output is
+# also uncolored whenever stdout is not a terminal.
+# [colors]
+# header    = "bold"
+# separator = "faint"
+# success   = "green"
+# warn      = "yellow"
+# error     = "red"
+# address   = "cyan"
+# time      = "blue"
+# dim       = "faint"
+# positive  = "green"
+# negative  = "red"

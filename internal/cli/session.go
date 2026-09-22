@@ -55,6 +55,6 @@ func runSession(cmd *cobra.Command, verb string, action sessionAction, at, descr
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
 	}
-	printEntryResult(cmd, verb, entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, verb, entry, rt.verbose)
 	return nil
 }

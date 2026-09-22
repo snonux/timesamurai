@@ -77,7 +77,7 @@ func runCredit(cmd *cobra.Command, at, descr string, args []string, action credi
 	if err != nil {
 		return err
 	}
-	printEntryResult(cmd, cmd.Name(), entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, cmd.Name(), entry, rt.verbose)
 	return nil
 }
 
@@ -118,7 +118,7 @@ func runUseBuffer(cmd *cobra.Command, at, descr, durationArg string) error {
 	if err != nil {
 		return err
 	}
-	printEntriesResult(cmd, "usebuffer", entries, rt.verbose)
+	printEntriesResult(cmd, rt.theme, "usebuffer", entries, rt.verbose)
 	return nil
 }
 
@@ -159,7 +159,7 @@ func runDayOff(cmd *cobra.Command, at, descr string, extraTags []string) error {
 	if err != nil {
 		return err
 	}
-	printEntryResult(cmd, "day-off", entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, "day-off", entry, rt.verbose)
 	return nil
 }
 

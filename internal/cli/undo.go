@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -47,7 +48,7 @@ func runUndo(cmd *cobra.Command, host string) error {
 	if err != nil {
 		return err
 	}
-	printUndoResult(cmd, rec, rt.verbose)
+	printUndoResult(cmd, rt.theme, rec, rt.verbose)
 	return nil
 }
 
@@ -55,14 +56,14 @@ func runUndo(cmd *cobra.Command, host string) error {
 // --verbose additionally prints the before/after (or restored) entry so a
 // caller can confirm exactly what came back, the same level of detail
 // printEntryResult gives every other mutation.
-func printUndoResult(cmd *cobra.Command, rec worktime.UndoRecord, verbose bool) {
+func printUndoResult(cmd *cobra.Command, theme ansi.Theme, rec worktime.UndoRecord, verbose bool) {
 	w := cmd.OutOrStdout()
 	host := undoRecordHost(rec)
-	_, _ = fmt.Fprintf(w, "undo %s: %s:%d\n", rec.Op, host, rec.ID)
+	_, _ = fmt.Fprintf(w, "%s %s\n", theme.Wrap(ansi.RoleSuccess, "undo "+rec.Op), theme.Wrap(ansi.RoleAddress, fmt.Sprintf("%s:%d", host, rec.ID)))
 	if !verbose {
 		return
 	}
-	printUndoDetail(w, rec)
+	printUndoDetail(w, theme, rec)
 }
 
 // printUndoDetail writes the verbose detail line for one undo record, split
@@ -70,19 +71,19 @@ func printUndoResult(cmd *cobra.Command, rec worktime.UndoRecord, verbose bool) 
 // flat read. Wording matches what UndoLast actually did to the entry:
 // undoing an insert removes it, undoing a delete restores it, and undoing a
 // modify reverts it from its post-modify state back to its pre-modify one.
-func printUndoDetail(w io.Writer, rec worktime.UndoRecord) {
+func printUndoDetail(w io.Writer, theme ansi.Theme, rec worktime.UndoRecord) {
 	switch rec.Op {
 	case worktime.OpInsert:
 		if rec.After != nil {
-			_, _ = fmt.Fprintf(w, "  removed: %s\n", formatEntry(*rec.After))
+			_, _ = fmt.Fprintf(w, "  removed: %s\n", formatEntry(*rec.After, theme))
 		}
 	case worktime.OpDelete:
 		if rec.Before != nil {
-			_, _ = fmt.Fprintf(w, "  restored: %s\n", formatEntry(*rec.Before))
+			_, _ = fmt.Fprintf(w, "  restored: %s\n", formatEntry(*rec.Before, theme))
 		}
 	case worktime.OpModify:
 		if rec.Before != nil && rec.After != nil {
-			_, _ = fmt.Fprintf(w, "  reverted from: %s\n  back to:       %s\n", formatEntry(*rec.After), formatEntry(*rec.Before))
+			_, _ = fmt.Fprintf(w, "  reverted from: %s\n  back to:       %s\n", formatEntry(*rec.After, theme), formatEntry(*rec.Before, theme))
 		}
 	}
 }

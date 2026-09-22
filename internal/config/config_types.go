@@ -19,6 +19,7 @@ type Config struct {
 	Accounting worktime.AccountingConfig
 	General    GeneralConfig
 	Report     ReportConfig
+	Colors     ColorsConfig
 }
 
 // StorageConfig locates the JSONL store and the legacy worktime JSON directory.
@@ -39,6 +40,16 @@ type ReportConfig struct {
 	Verbose bool
 }
 
+// ColorsConfig holds the per-role style palette for terminal colors
+// (task n9). The master on/off switch is Report.Color (config, the
+// TIMESAMURAI_COLOR env var, the --no-color flag, plus the standard
+// NO_COLOR/CLICOLOR_FORCE/TTY resolution in internal/ansi); Palette only
+// remaps which style each role uses. Nil means "defaults from
+// internal/ansi".
+type ColorsConfig struct {
+	Palette map[string]string
+}
+
 // LoadOptions tune how configuration is loaded at runtime.
 type LoadOptions struct {
 	// IgnoreEnv skips applying TIMESAMURAI_* environment overrides when true.
@@ -56,6 +67,7 @@ type fileConfig struct {
 	Accounting sectionAccounting `toml:"accounting"`
 	General    sectionGeneral    `toml:"general"`
 	Report     sectionReport     `toml:"report"`
+	Colors     sectionColors     `toml:"colors"`
 }
 
 type sectionStorage struct {
@@ -81,12 +93,18 @@ type sectionReport struct {
 	Verbose *bool `toml:"verbose"`
 }
 
+// sectionColors is the [colors] table: role name -> style name (e.g.
+// "header = \"bold cyan\""), decoded as a plain map so new roles from
+// internal/ansi need no config-side changes.
+type sectionColors map[string]string
+
 // overlay carries only fields that were explicitly set, for section-wise merge.
 type overlay struct {
 	Storage    storageOverlay
 	Accounting accountingOverlay
 	General    generalOverlay
 	Report     reportOverlay
+	Colors     colorsOverlay
 }
 
 type storageOverlay struct {
@@ -110,4 +128,8 @@ type generalOverlay struct {
 type reportOverlay struct {
 	Color   *bool
 	Verbose *bool
+}
+
+type colorsOverlay struct {
+	Palette map[string]string
 }

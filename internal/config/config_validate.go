@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -19,6 +20,9 @@ func (c *Config) Validate() error {
 	}
 	if err := validateAccounting(c.Accounting); err != nil {
 		return err
+	}
+	if _, err := ansi.NewTheme(c.Report.Color, c.Colors.Palette); err != nil {
+		return fmt.Errorf("config: %w", err)
 	}
 	return nil
 }

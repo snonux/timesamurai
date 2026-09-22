@@ -36,9 +36,13 @@ func runSearch(cmd *cobra.Command, text string, f filterFlagValues) error {
 	}
 	f.descr = trimmed
 
-	rows, err := queryRows(cmd, "", f)
+	rt, err := newRuntime(cmd)
 	if err != nil {
 		return err
 	}
-	return printRows(cmd, rows, f.format)
+	rows, err := queryRows(rt, "", f)
+	if err != nil {
+		return err
+	}
+	return printRows(cmd, rt.theme, rows, f.format)
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -23,7 +24,7 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printStatus(cmd, worktime.OpenSessions(rt.store, rt.cfg.Accounting))
+			printStatus(cmd, rt.theme, worktime.OpenSessions(rt.store, rt.cfg.Accounting))
 			return nil
 		},
 	}
@@ -37,13 +38,15 @@ func newStatusCmd() *cobra.Command {
 // does. Write errors are discarded explicitly (same rationale as
 // output.go's printEntryResult) rather than left unchecked, so errcheck can
 // confirm the sink is trusted rather than just assume it.
-func printStatus(cmd *cobra.Command, open []worktime.OpenSession) {
+func printStatus(cmd *cobra.Command, theme ansi.Theme, open []worktime.OpenSession) {
 	w := cmd.OutOrStdout()
 	if len(open) == 0 {
-		_, _ = fmt.Fprintln(w, "no open sessions")
+		_, _ = fmt.Fprintln(w, theme.Wrap(ansi.RoleDim, "no open sessions"))
 		return
 	}
 	for _, s := range open {
-		_, _ = fmt.Fprintf(w, "%s: open on %s since %s\n", s.Category, s.Host, s.Since.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(w, "%s: open on %s since %s\n",
+			theme.Wrap(ansi.RoleSuccess, s.Category), s.Host,
+			theme.Wrap(ansi.RoleTime, s.Since.Format("2006-01-02 15:04:05")))
 	}
 }

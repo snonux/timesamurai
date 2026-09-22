@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/timefmt"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
@@ -42,35 +43,41 @@ func parseAtFlag(at string) (time.Time, error) {
 // separate from printEntriesResult (rather than the latter always calling
 // this in a loop with an extra branch) only to keep both callers' intent
 // obvious at the call site -- one entry vs. several.
-func printEntryResult(cmd *cobra.Command, verb string, entry worktime.Entry, verbose bool) {
+func printEntryResult(cmd *cobra.Command, theme ansi.Theme, verb string, entry worktime.Entry, verbose bool) {
 	// The underlying sink is cobra's configured stdout writer, which in
 	// normal operation is os.Stdout and in tests is an in-memory buffer;
 	// neither fails in practice, but the errors are discarded explicitly
 	// (matching worktime/query.go's FormatTable) so errcheck can confirm
 	// that rather than just assume it.
 	if verbose {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", verb, formatEntry(entry))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n",
+			theme.Wrap(ansi.RoleSuccess, verb), formatEntry(entry, theme))
 		return
 	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s:%d\n", verb, entry.Host, entry.ID)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n",
+		theme.Wrap(ansi.RoleSuccess, verb),
+		theme.Wrap(ansi.RoleAddress, fmt.Sprintf("%s:%d", entry.Host, entry.ID)))
 }
 
 // printEntriesResult reports every entry a multi-entry mutation produced
 // (currently only UseBuffer's withdraw+credit pair) via printEntryResult, so
 // --verbose/terse formatting stays defined in exactly one place.
-func printEntriesResult(cmd *cobra.Command, verb string, entries []worktime.Entry, verbose bool) {
+func printEntriesResult(cmd *cobra.Command, theme ansi.Theme, verb string, entries []worktime.Entry, verbose bool) {
 	for _, e := range entries {
-		printEntryResult(cmd, verb, e, verbose)
+		printEntryResult(cmd, theme, verb, e, verbose)
 	}
 }
 
 // formatEntry renders entry's fields for --verbose output. Tags are
 // comma-joined and descr is quoted only when present, so a plain entry
-// doesn't end with a trailing empty descr="".
-func formatEntry(e worktime.Entry) string {
+// doesn't end with a trailing empty descr="". The address and time fields
+// are styled when the theme is enabled (task n9).
+func formatEntry(e worktime.Entry, theme ansi.Theme) string {
 	when := time.Unix(e.Epoch, 0).Format("2006-01-02 15:04:05")
 	tags := strings.Join(e.Tags, ",")
-	base := fmt.Sprintf("%s:%d action=%s at=%s value=%d tags=%s", e.Host, e.ID, e.Action, when, e.Value, tags)
+	address := theme.Wrap(ansi.RoleAddress, fmt.Sprintf("%s:%d", e.Host, e.ID))
+	stamp := theme.Wrap(ansi.RoleTime, when)
+	base := fmt.Sprintf("%s action=%s at=%s value=%d tags=%s", address, e.Action, stamp, e.Value, tags)
 	if e.Descr == "" {
 		return base
 	}

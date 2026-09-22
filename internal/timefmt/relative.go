@@ -90,7 +90,7 @@ func parseRelativeDayPhrase(lower string, now time.Time) (t time.Time, granulari
 			// May land on today itself ("this tuesday" on a Tuesday) or in
 			// the recent past ("this monday" on a Tuesday = yesterday).
 			daysSinceMonday := (int(today) + 6) % 7
-			deltaDays = (int(target) + 6) % 7 - daysSinceMonday
+			deltaDays = (int(target)+6)%7 - daysSinceMonday
 		default:
 			// "next <weekday>" and a bare weekday both mean the coming
 			// occurrence strictly in the future: today never qualifies,

@@ -68,7 +68,7 @@ func runModify(cmd *cobra.Command, addr, at, value, descr, action string, tags [
 	if err != nil {
 		return err
 	}
-	printEntryResult(cmd, "modify", entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, "modify", entry, rt.verbose)
 	return nil
 }
 

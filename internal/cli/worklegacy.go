@@ -266,7 +266,7 @@ func runLegacyMutation(ctx context.Context, cmd *cobra.Command, rt *runtime, ver
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
 	}
-	printEntryResult(cmd, verb, entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, verb, entry, rt.verbose)
 	return nil
 }
 
@@ -315,7 +315,7 @@ func runLegacyCredit(ctx context.Context, cmd *cobra.Command, rt *runtime, verb,
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
 	}
-	printEntryResult(cmd, verb, entry, rt.verbose)
+	printEntryResult(cmd, rt.theme, verb, entry, rt.verbose)
 	return nil
 }
 
@@ -332,6 +332,6 @@ func runLegacyUseBuffer(ctx context.Context, cmd *cobra.Command, rt *runtime, ra
 	if err != nil {
 		return fmt.Errorf("usebuffer: %w", err)
 	}
-	printEntriesResult(cmd, "usebuffer", entries, rt.verbose)
+	printEntriesResult(cmd, rt.theme, "usebuffer", entries, rt.verbose)
 	return nil
 }

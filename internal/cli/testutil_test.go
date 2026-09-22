@@ -18,6 +18,13 @@ import (
 // data or ~/git/worktime.
 func newScratchStore(t *testing.T) string {
 	t.Helper()
+	// Hermetic color environment (task n9): neutralize ambient color env so
+	// a developer's CLICOLOR_FORCE=1 or a TTY-attached test run cannot leak
+	// escapes into the exact-output assertions across this package. Style
+	// tests opt back in with t.Setenv after this call.
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TIMESAMURAI_COLOR", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	return t.TempDir()
 }

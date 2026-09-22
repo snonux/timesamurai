@@ -12,20 +12,22 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/config"
 	"github.com/snonux/timesamurai/internal/pathutil"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
-// runtime bundles the config, opened store, resolved hostname, and verbose
-// flag every work subcommand needs, so each RunE makes one newRuntime(cmd)
-// call instead of repeating config.Load/worktime.Open/hostname-resolution
-// wiring in every verb file.
+// runtime bundles the config, opened store, resolved hostname, verbose
+// flag, and color theme every work subcommand needs, so each RunE makes one
+// newRuntime(cmd) call instead of repeating config.Load/worktime.Open/
+// hostname-resolution wiring in every verb file.
 type runtime struct {
 	cfg     config.Config
 	store   *worktime.Store
 	host    string
 	verbose bool
+	theme   ansi.Theme
 }
 
 // newRuntime loads configuration (honoring the --db/--store overrides
@@ -58,7 +60,24 @@ func newRuntime(cmd *cobra.Command) (*runtime, error) {
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	return &runtime{cfg: cfg, store: store, host: host, verbose: verbose}, nil
+	theme, err := resolveTheme(cmd, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &runtime{cfg: cfg, store: store, host: host, verbose: verbose, theme: theme}, nil
+}
+
+// resolveTheme builds the color theme for a run: the master switch is the
+// standard precedence in ansi.ShouldEnable (NO_COLOR > CLICOLOR_FORCE >
+// config's report.color > stdout-is-a-terminal), with --no-color forcing
+// the config switch off, and config's [colors] palette remapping roles.
+func resolveTheme(cmd *cobra.Command, cfg config.Config) (ansi.Theme, error) {
+	cfgEnabled := cfg.Report.Color
+	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+		cfgEnabled = false
+	}
+	enabled := ansi.ShouldEnable(cfgEnabled, os.Stdout, os.Getenv)
+	return ansi.NewTheme(enabled, cfg.Colors.Palette)
 }
 
 // loadConfigWithOverrides loads the sectioned TOML config and then applies

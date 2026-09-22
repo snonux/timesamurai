@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -44,11 +45,15 @@ func runReport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	weeks, err := worktime.BuildReport(entries, rt.cfg.Accounting, cmd.ErrOrStderr())
+	// Task n9: the plain formatter output is styled here, at the CLI layer,
+	// so worktime's byte-exact formatters (and the golden-diff regression
+	// guard) stay untouched. Warnings stream through a colorizing writer.
+	weeks, err := worktime.BuildReport(entries, rt.cfg.Accounting,
+		newColorizeWriter(cmd.ErrOrStderr(), rt.theme, ansi.RoleWarn))
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), worktime.FormatReport(weeks, rt.verbose))
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), colorizeReport(rt.theme, worktime.FormatReport(weeks, rt.verbose)))
 	return nil
 }
 

@@ -32,6 +32,15 @@ timesamurai completion                    generate shell completion scripts
 
 Run `timesamurai --help` or `timesamurai work <command> --help` for full flag details.
 
+## Terminal colors
+
+Output is colored on terminals (headers bold, entry addresses cyan, week
+separators faint, positive/negative balances green/red, ...). Roles and
+styles are themable via the `[colors]` section of `config.toml`; everything
+turns off with `report.color = false`, the `--no-color` flag, or a `NO_COLOR`
+environment variable, and colors never leak into pipes or files (see
+`docs/configuration.md`).
+
 ## Build
 
 ```bash

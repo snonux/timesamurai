@@ -52,6 +52,7 @@ func Default() Config {
 			Color:   true,
 			Verbose: false,
 		},
+		Colors: ColorsConfig{}, // nil palette: internal/ansi's defaults
 	}
 }
 

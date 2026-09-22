@@ -624,3 +624,59 @@ weekend_days = ["Sat"]
 
 func floatPtr(f float64) *float64 { return &f }
 func boolPtr(b bool) *bool        { return &b }
+
+// TestLoad_ColorsPalette covers the [colors] section (task n9): role
+// overrides land in Config.Colors.Palette, an empty/absent section keeps
+// the nil (ansi-defaults) palette, and unknown roles or style names fail
+// validation loudly.
+func TestLoad_ColorsPalette(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, dir, `
+[colors]
+header = "bold cyan"
+negative = "brightred"
+`)
+
+	cfg, err := Load(context.Background(), LoadOptions{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := map[string]string{"header": "bold cyan", "negative": "brightred"}
+	if !reflect.DeepEqual(cfg.Colors.Palette, want) {
+		t.Fatalf("palette: got %v want %v", cfg.Colors.Palette, want)
+	}
+}
+
+func TestLoad_ColorsUnknownRoleFails(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, dir, `
+[colors]
+nope = "red"
+`)
+
+	if _, err := Load(context.Background(), LoadOptions{}); err == nil {
+		t.Fatal("unknown [colors] role accepted")
+	} else if !strings.Contains(err.Error(), `unsupported key "colors"."nope"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_ColorsUnknownStyleFails(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, dir, `
+[colors]
+header = "chartreuse"
+`)
+
+	if _, err := Load(context.Background(), LoadOptions{}); err == nil {
+		t.Fatal("unknown [colors] style accepted")
+	} else if !strings.Contains(err.Error(), "unknown style") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

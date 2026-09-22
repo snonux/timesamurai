@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -15,6 +16,7 @@ func (c *Config) mergeWith(other *overlay) {
 	mergeAccounting(&c.Accounting, other.Accounting)
 	mergeGeneral(&c.General, other.General)
 	mergeReport(&c.Report, other.Report)
+	mergeColors(&c.Colors, other.Colors)
 }
 
 func mergeStorage(dst *StorageConfig, src storageOverlay) {
@@ -59,5 +61,13 @@ func mergeReport(dst *ReportConfig, src reportOverlay) {
 	}
 	if src.Verbose != nil {
 		dst.Verbose = *src.Verbose
+	}
+}
+
+func mergeColors(dst *ColorsConfig, src colorsOverlay) {
+	if src.Palette != nil {
+		palette := make(map[string]string, len(src.Palette))
+		maps.Copy(palette, src.Palette)
+		dst.Palette = palette
 	}
 }

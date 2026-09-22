@@ -144,7 +144,7 @@ func applyImportLine(ctx context.Context, cmd *cobra.Command, rt *runtime, parse
 		if err != nil {
 			return fmt.Errorf("import %s entry: %w", c.tag, err)
 		}
-		printEntryResult(cmd, "import", entry, rt.verbose)
+		printEntryResult(cmd, rt.theme, "import", entry, rt.verbose)
 	}
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/pathutil"
 )
 
@@ -139,7 +140,7 @@ func decodeTOML(data []byte) (*fileConfig, map[string]any, error) {
 
 func rejectUnknownKeys(raw map[string]any) error {
 	knownTop := map[string]struct{}{
-		"storage": {}, "accounting": {}, "general": {}, "report": {},
+		"storage": {}, "accounting": {}, "general": {}, "report": {}, "colors": {},
 	}
 	knownSections := map[string]map[string]struct{}{
 		"storage": {
@@ -155,11 +156,14 @@ func rejectUnknownKeys(raw map[string]any) error {
 		"report": {
 			"color": {}, "verbose": {},
 		},
+		// [colors] is role-name keyed, so its allowed keys come from
+		// internal/ansi's role list rather than a hand-maintained set here.
+		"colors": roleKeySet(),
 	}
 
 	for key, value := range raw {
 		if _, ok := knownTop[key]; !ok {
-			return fmt.Errorf("unsupported top-level key %q; use sectioned tables [storage], [accounting], [general], [report]", key)
+			return fmt.Errorf("unsupported top-level key %q; use sectioned tables [storage], [accounting], [general], [report], [colors]", key)
 		}
 		section, ok := value.(map[string]any)
 		if !ok {
@@ -181,6 +185,7 @@ func (fc *fileConfig) toOverlay() *overlay {
 	applyAccountingSection(fc, out)
 	applyGeneralSection(fc, out)
 	applyReportSection(fc, out)
+	applyColorsSection(fc, out)
 	return out
 }
 
@@ -234,6 +239,20 @@ func applyReportSection(fc *fileConfig, out *overlay) {
 	}
 }
 
+// applyColorsSection carries the [colors] palette through as one unit: the
+// map is either absent (defaults win) or wholly present, and per-key merges
+// happen inside ansi.NewTheme against the default palette.
+func applyColorsSection(fc *fileConfig, out *overlay) {
+	if len(fc.Colors) == 0 {
+		return
+	}
+	palette := make(map[string]string, len(fc.Colors))
+	for role, style := range fc.Colors {
+		palette[role] = style
+	}
+	out.Colors.Palette = palette
+}
+
 func (c *Config) normalize() error {
 	if strings.TrimSpace(c.Storage.StoreDir) == "" {
 		c.Storage.StoreDir = c.Storage.DBDir
@@ -252,6 +271,17 @@ func (c *Config) normalize() error {
 }
 
 func stringPtr(s string) *string { return &s }
+
+// roleKeySet builds the allowed-key set for the [colors] section from
+// internal/ansi's role list, so a role added there is automatically a valid
+// config key here too.
+func roleKeySet() map[string]struct{} {
+	allowed := make(map[string]struct{}, len(ansi.Roles()))
+	for _, role := range ansi.Roles() {
+		allowed[role] = struct{}{}
+	}
+	return allowed
+}
 
 func slicesClone(in []string) []string {
 	if in == nil {

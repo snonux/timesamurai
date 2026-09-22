@@ -20,6 +20,7 @@ authoritative list of options and comments lives in the example file.
 | `[accounting]` | Weekly hours target and tag categories (`plus_for`, `minus_for`, `buffer_for`, `weekend_days`) |
 | `[general]` | Hostname override and `auto_worktime_login` |
 | `[report]` | Report presentation (`color`, `verbose`) |
+| `[colors]` | Per-role terminal color palette overrides (see below) |
 
 `store_dir` defaults to `db_dir` when unset in the file. Built-in defaults use
 `~/git/worktime` for `db_dir` and `~/git/worktime/timesamuraidb` for `store_dir`.
@@ -53,6 +54,34 @@ Recognised variables (whitespace-only values are ignored):
 
 Booleans accept `true` / `false` / `yes` / `no` / `1` / `0` / `on` / `off`
 (case-insensitive).
+
+## Terminal colors (task n9)
+
+All command output can be colored. The master switch is `report.color`
+(`TIMESAMURAI_COLOR` env var, `--no-color` flag to disable per-run).
+Colors are additionally disabled by the standard `NO_COLOR` environment
+variable, and automatically whenever stdout is not a terminal; the standard
+`CLICOLOR_FORCE` variable forces colors on (e.g. through a pipe) without
+overriding an explicit `report.color = false` or `--no-color`. The enable
+decision is made once per run against stdout, so stderr (e.g. report
+warnings) follows stdout's decision — redirecting only stderr to a file on
+an interactive terminal can put escape codes in that file, the same way most
+CLI tools behave.
+
+The `[colors]` section remaps which style each semantic role uses. Roles:
+`header`, `separator`, `success`, `warn`, `error`, `address`, `time`,
+`dim`, `positive`, `negative`. Style names: the 8 base colors (`black`
+.. `white`), their bright variants (`brightblack`.. `brightwhite`),
+`default`, and the attributes `bold`, `faint`, `italic`, `underline` —
+space-joined combinations like `bold cyan` are allowed:
+
+```toml
+[colors]
+negative = "bold red"
+address  = "brightcyan"
+```
+
+Unknown roles or style names are config errors.
 
 ## Legacy `config.json` migration
 

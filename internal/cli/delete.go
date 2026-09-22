@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -51,7 +52,7 @@ func runDelete(cmd *cobra.Command, addrs []string, dryRun bool) error {
 			return err
 		}
 		if !ok {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "delete cancelled")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), rt.theme.Wrap(ansi.RoleDim, "delete cancelled"))
 			return nil
 		}
 	}
@@ -70,7 +71,8 @@ func previewDelete(cmd *cobra.Command, rt *runtime, addrs []string) error {
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would delete %s: %s\n", canonical, formatEntry(entry))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n",
+			rt.theme.Wrap(ansi.RoleWarn, "would delete"), canonical, formatEntry(entry, rt.theme))
 	}
 	return nil
 }
@@ -87,7 +89,7 @@ func performDelete(cmd *cobra.Command, rt *runtime, addrs []string) error {
 		if err != nil {
 			return fmt.Errorf("delete %s: %w", addr, err)
 		}
-		printEntryResult(cmd, "delete", entry, rt.verbose)
+		printEntryResult(cmd, rt.theme, "delete", entry, rt.verbose)
 	}
 	return nil
 }

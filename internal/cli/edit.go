@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
@@ -61,7 +62,7 @@ func runEdit(cmd *cobra.Command, rangeArg string) error {
 	}
 
 	applied, applyErr := applyEditOps(cmdContext(cmd), rt.store, rt.cfg.Accounting, rt.host, ops)
-	printEditSummary(cmd, ops, applied, rt.verbose)
+	printEditSummary(cmd, rt.theme, ops, applied, rt.verbose)
 	return applyErr
 }
 
@@ -89,13 +90,13 @@ func parseAndDiffEdit(rows []worktime.Row, edited string) ([]editOp, error) {
 
 // printEditSummary reports each applied op via printEntryResult, the same
 // "<verb> <host>:<id>"/verbose shape every other mutating verb uses.
-func printEditSummary(cmd *cobra.Command, ops []editOp, applied []worktime.Entry, verbose bool) {
+func printEditSummary(cmd *cobra.Command, theme ansi.Theme, ops []editOp, applied []worktime.Entry, verbose bool) {
 	if len(ops) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no changes")
 		return
 	}
 	for i, entry := range applied {
-		printEntryResult(cmd, editOpVerb(ops[i].Kind), entry, verbose)
+		printEntryResult(cmd, theme, editOpVerb(ops[i].Kind), entry, verbose)
 	}
 }
 

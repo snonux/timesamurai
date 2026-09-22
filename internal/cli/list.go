@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/timefmt"
 	"github.com/snonux/timesamurai/internal/worktime"
 )
@@ -76,11 +77,15 @@ func addFilterFlags(cmd *cobra.Command, f *filterFlagValues, includeDescr bool) 
 // runList resolves the optional positional range and flag values into a
 // worktime.Filter, queries every host's entries, and prints the result.
 func runList(cmd *cobra.Command, args []string, f filterFlagValues) error {
-	rows, err := queryRows(cmd, positionalRange(args), f)
+	rt, err := newRuntime(cmd)
 	if err != nil {
 		return err
 	}
-	return printRows(cmd, rows, f.format)
+	rows, err := queryRows(rt, positionalRange(args), f)
+	if err != nil {
+		return err
+	}
+	return printRows(cmd, rt.theme, rows, f.format)
 }
 
 // positionalRange returns args[0] when list/search was given an optional
@@ -93,17 +98,13 @@ func positionalRange(args []string) string {
 	return args[0]
 }
 
-// queryRows loads the runtime's store and runs worktime.Query against every
-// host's entries (CollectEntries), using the filter buildFilter derives from
-// rangeArg and f. Shared by list and search (and, for its own no-range-arg
-// full-history path, indirectly documents the same filter-building rules
-// report.go relies on).
-func queryRows(cmd *cobra.Command, rangeArg string, f filterFlagValues) ([]worktime.Row, error) {
+// queryRows runs worktime.Query against every host's entries (CollectEntries)
+// using the filter buildFilter derives from rangeArg and f. Shared by list and
+// search (and, for its own no-range-arg full-history path, indirectly
+// documents the same filter-building rules report.go relies on). rt comes
+// from the caller's single newRuntime call so the store opens once per run.
+func queryRows(rt *runtime, rangeArg string, f filterFlagValues) ([]worktime.Row, error) {
 	filter, err := buildFilter(rangeArg, f)
-	if err != nil {
-		return nil, err
-	}
-	rt, err := newRuntime(cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -220,10 +221,12 @@ func parseValueBound(flag, value string) (int64, error) {
 // ends in "\n" (or is empty for zero rows plus its header), but FormatJSON's
 // indented output does not, so JSON gets one appended here rather than
 // leaving output format-dependent on whether the last line is terminated.
-func printRows(cmd *cobra.Command, rows []worktime.Row, format string) error {
+// Table output passes through colorizeTable (task n9); JSON stays byte-exact
+// since it is machine-readable.
+func printRows(cmd *cobra.Command, theme ansi.Theme, rows []worktime.Row, format string) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "", "table":
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), worktime.FormatTable(rows))
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), colorizeTable(theme, worktime.FormatTable(rows)))
 		return nil
 	case "json":
 		out, err := worktime.FormatJSON(rows)
