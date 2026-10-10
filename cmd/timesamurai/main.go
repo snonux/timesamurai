@@ -60,15 +60,19 @@ var helpStream = os.Stdout
 func newRoot() *cobra.Command {
 	root := buildRoot()
 	// Help is printed outside any work subcommand's runtime, so it resolves
-	// its own best-effort theme (internal/cli/ambient.go). cobra has parsed
-	// the flags of the command being helped by the time this runs, so the
-	// parsed --no-color/--config are authoritative; no raw-args fallback is
-	// needed here, unlike in reportError.
+	// its own best-effort theme (internal/cli/ambient.go) from the flags
+	// cobra parsed. --no-color exists as two flag objects, the root's and
+	// `work`'s (which shadows it for the work tree), and which one a run
+	// sets depends on the invocation: `work list --help --no-color` sets
+	// work's, `help work list --no-color` the root's (cobra parses the help
+	// command's flags there, not those of the command being helped). Either
+	// one turns colors off.
 	cli.InstallColorHelp(root, func(cmd *cobra.Command) ansi.Theme {
-		noColor, _ := cmd.Flags().GetBool("no-color")
+		onCommand, _ := cmd.Flags().GetBool("no-color")
+		onRoot, _ := root.PersistentFlags().GetBool("no-color")
 		return cli.AmbientTheme(cli.AmbientInputs{
 			ConfigPath: parsedConfigPath(root),
-			NoColor:    noColor,
+			NoColor:    onCommand || onRoot,
 			File:       helpStream,
 		})
 	})

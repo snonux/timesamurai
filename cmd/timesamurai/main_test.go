@@ -18,9 +18,27 @@ import (
 // to a terminal: help is captured in buffers, but its color decision looks
 // at helpStream. With no stream, help is colored only when a test forces it
 // (CLICOLOR_FORCE).
+//
+// It also points XDG_CONFIG_HOME at an empty directory and clears the color
+// variables for the whole package, so no test -- including the older ones
+// that never call hermeticColorEnv -- reads the developer's real
+// config.toml or inherits their color settings through the help path.
 func TestMain(m *testing.M) {
 	helpStream = nil
-	os.Exit(m.Run())
+	configHome, err := os.MkdirTemp("", "timesamurai-test-config")
+	if err != nil {
+		panic(err)
+	}
+	for key, value := range map[string]string{
+		"XDG_CONFIG_HOME": configHome, "NO_COLOR": "", "CLICOLOR_FORCE": "", "TIMESAMURAI_COLOR": "",
+	} {
+		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
+	code := m.Run()
+	_ = os.RemoveAll(configHome)
+	os.Exit(code)
 }
 
 func TestRootHelp(t *testing.T) {
@@ -258,6 +276,14 @@ func TestNoColorFlagUncolorsHelpAtEveryLevel(t *testing.T) {
 		{"work", "--no-color", "list", "--help"},
 		{"--no-color", "work", "list", "--help"},
 		{"work", "list", "--help", "--no-color=true"},
+		// The `help <cmd>` form parses the help command's flags, i.e. the
+		// root's --no-color even for a command under `work`.
+		{"help", "work", "list", "--no-color"},
+		{"help", "--no-color", "work", "list"},
+		{"--no-color", "help", "work", "list"},
+		{"help", "work", "--no-color"},
+		{"help", "completion", "--no-color"},
+		{"help", "--no-color"},
 		{"--no-color"},
 	} {
 		out, err := runRoot(t, args...)
@@ -272,6 +298,9 @@ func TestNoColorFlagUncolorsHelpAtEveryLevel(t *testing.T) {
 	// misspelled variant is still rejected.
 	if out, err := runRoot(t, "--no-color=false", "--help"); err != nil || !strings.ContainsRune(out, '\x1b') {
 		t.Errorf("--no-color=false: err=%v, help not colored: %q", err, out)
+	}
+	if out, err := runRoot(t, "help", "work", "list"); err != nil || !strings.ContainsRune(out, '\x1b') {
+		t.Errorf("help work list without --no-color: err=%v, not colored: %q", err, out)
 	}
 	if _, err := runRoot(t, "--no-colour", "--help"); err == nil {
 		t.Error("--no-colour was accepted")

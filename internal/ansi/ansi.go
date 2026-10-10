@@ -13,7 +13,7 @@
 //	NO_COLOR set (any non-empty value)  -> off, no matter what
 //	report.color=false / --no-color     -> off, no matter what
 //	CLICOLOR_FORCE set and not "0"      -> on, even when not a terminal
-//	stdout is not a terminal            -> off
+//	the stream is not a terminal        -> off
 //	otherwise                           -> on
 //
 // so piping into a file or pager never leaks escape codes, an explicit

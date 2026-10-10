@@ -25,7 +25,12 @@ func TestHasNoColorFlag(t *testing.T) {
 		{"explicit false", []string{"work", "--no-color=false", "report"}, false},
 		{"explicit zero", []string{"--no-color=0"}, false},
 		{"garbage value counts as set", []string{"--no-color=maybe"}, true},
-		{"after terminator is a positional", []string{"work", "--", "--no-color"}, false},
+		// "--" may be a flag's value rather than the end of the flags, so
+		// --no-color after it still counts (toward plain) ...
+		{"after terminator still counts", []string{"work", "--", "--no-color"}, true},
+		{"terminator as a flag value", []string{"work", "add", "1h", "-d", "--", "--no-color", "--bogus"}, true},
+		// ... but can no longer switch the flag back off.
+		{"false after terminator alone", []string{"work", "--", "--no-color=false"}, false},
 		{"similar flag is not it", []string{"--no-colors", "--no-colour"}, false},
 		{"flag value lookalike", []string{"-d", "no-color"}, false},
 		// Documented imprecision: a raw scan cannot tell a flag from another

@@ -306,9 +306,8 @@ func TestColorizeTableNewlineInDescrKeepsLaterRowsStyled(t *testing.T) {
 	if len(lines) != 6 { // header, row 1, continuation, rows 2-3, trailing ""
 		t.Fatalf("got %d lines, want 6: %q", len(lines), styled)
 	}
-	if lines[2] != "\x1b[36mfake:9\x1b[0m  add  not a row" {
-		// Only the address-shaped prefix is styled (n9's fallback); "add"
-		// must not be taken for an action cell.
+	if lines[2] != "fake:9  add  not a row" {
+		// It is descr text, however row-like: no part of it is styled.
 		t.Errorf("continuation line = %q", lines[2])
 	}
 	for _, want := range []string{
@@ -347,6 +346,10 @@ func TestColorizeTableTerminatorsInFreeText(t *testing.T) {
 		"tag only a newline":      {Tags: []string{"\n"}},
 		"space in tag":            {Tags: []string{"two words"}},
 		"descr mimics next row":   {Descr: "x\nh:9  logout  nope"},
+		"descr is the next row":   {Descr: "x\nh:9  logout  " + time.Unix(1700000900, 0).Format(worktime.DisplayTimeLayout) + "  7  lunch  fake"},
+		"leading space in tag":    {Tags: []string{" lead"}},
+		"tag of only spaces":      {Tags: []string{"   "}},
+		"newline then space tag":  {Tags: []string{"a\n b", " c"}},
 		"descr is an address":     {Descr: "h:9"},
 		"descr with leading tabs": {Descr: "\t\tindented"},
 	}
@@ -363,10 +366,53 @@ func TestColorizeTableTerminatorsInFreeText(t *testing.T) {
 			if !lastStyled.MatchString(styled) {
 				t.Errorf("row after the odd one lost column styling:\n%q", styled)
 			}
+			// Exactly the two real rows start with a styled address: no
+			// continuation line, however row-like, is styled as a row.
+			if got := strings.Count(styled, "\n\x1b[36m"); got != 2 {
+				t.Errorf("%d lines styled as rows, want 2:\n%q", got, styled)
+			}
 			if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
 				t.Errorf("visible text differs:\n got %q\nwant %q", got, plain)
 			}
 		})
+	}
+}
+
+// TestColorizeTableLeadingSpaceCellsStyled pins the exact rendering of a
+// row whose cells start with blanks (reachable through a hand-edited
+// store): padding stays outside the escapes, the blanks that belong to the
+// cell text inside.
+func TestColorizeTableLeadingSpaceCellsStyled(t *testing.T) {
+	rows := []worktime.Row{
+		{Address: "h:1", Entry: worktime.Entry{Host: "h", ID: 1, Action: " add", Epoch: 1700000000, Value: 1, Tags: []string{" lead"}}},
+	}
+	plain := worktime.FormatTable(rows)
+	styled := colorizeTable(enabledTheme(t), plain, rows)
+	for _, want := range []string{"\x1b[36mh:1\x1b[0m      \x1b[35m add\x1b[0m    \x1b[34m", "\x1b[1m1\x1b[0m      \x1b[33m lead\x1b[0m  \n"} {
+		if !strings.Contains(styled, want) {
+			t.Errorf("missing %q in %q", want, styled)
+		}
+	}
+	if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
+		t.Errorf("visible text differs:\n got %q\nwant %q", got, plain)
+	}
+}
+
+// TestTableRowLines pins the line count that maps rows to rendered lines.
+func TestTableRowLines(t *testing.T) {
+	cases := map[int]worktime.Row{
+		1: {Address: "h:1", Entry: worktime.Entry{Action: "add", Descr: "plain \t\v\r text", Tags: []string{"a", "b"}}},
+		2: {Address: "h:1", Entry: worktime.Entry{Descr: "one\ntwo"}},
+		4: {Address: "h:1", Entry: worktime.Entry{Action: "a\fb", Descr: "x\n", Tags: []string{"t\n", "u"}}},
+	}
+	for want, row := range cases {
+		if got := tableRowLines(row); got != want {
+			t.Errorf("tableRowLines(%+v) = %d, want %d", row.Entry, got, want)
+		}
+		// The count must agree with what FormatTable really renders.
+		if rendered := strings.Count(worktime.FormatTable([]worktime.Row{row}), "\n") - 1; rendered != want {
+			t.Errorf("FormatTable rendered %d lines for %+v, want %d", rendered, row.Entry, want)
+		}
 	}
 }
 
@@ -389,8 +435,9 @@ func TestTableRowCellsCutsAtTerminator(t *testing.T) {
 
 // TestColorizeTableRowsNotMatchingRenderingFallBack is the negative case
 // for cell location: when the rows handed in are not what the table was
-// rendered from, no cell is guessed -- each line keeps only its address
-// styled -- and surplus rows cannot index past the rendering.
+// rendered from, no cell is guessed -- styling stops at the first cell that
+// is not where it should be -- and surplus rows cannot index past the
+// rendering. With no rows at all only the header is styled.
 func TestColorizeTableRowsNotMatchingRenderingFallBack(t *testing.T) {
 	theme := enabledTheme(t)
 	rendered := []worktime.Row{
@@ -402,11 +449,18 @@ func TestColorizeTableRowsNotMatchingRenderingFallBack(t *testing.T) {
 		{Address: "host1:2", Entry: worktime.Entry{Host: "host1", ID: 2, Action: "add"}},
 		{Address: "host1:3", Entry: worktime.Entry{Host: "host1", ID: 3, Action: "add"}},
 	}
+	plainRow := strings.Split(plain, "\n")[1]
+	wantRow := map[string]string{
+		"different rows": "\x1b[36mhost1:1\x1b[0m" + strings.TrimPrefix(plainRow, "host1:1"),
+		"no rows":        plainRow,
+	}
 	for name, rows := range map[string][]worktime.Row{"different rows": other, "no rows": nil} {
 		styled := colorizeTable(theme, plain, rows)
-		row := strings.Split(styled, "\n")[1]
-		if !strings.HasPrefix(row, "\x1b[36mhost1:1\x1b[0m  add ") || strings.Count(row, "\x1b[") != 2 {
-			t.Errorf("%s: row should have only its address styled, got %q", name, row)
+		if row := strings.Split(styled, "\n")[1]; row != wantRow[name] {
+			t.Errorf("%s: row = %q, want %q", name, row, wantRow[name])
+		}
+		if !strings.HasPrefix(styled, "\x1b[1mADDRESS") {
+			t.Errorf("%s: header not styled: %q", name, styled)
 		}
 		if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
 			t.Errorf("%s: visible text differs:\n got %q\nwant %q", name, got, plain)

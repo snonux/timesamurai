@@ -90,7 +90,10 @@ func loadAmbientConfig(configPath string) config.Config {
 
 // configPathFromArgs returns the --config value from raw args ("--config
 // <path>" or "--config=<path>", before a "--" terminator), or "" when there
-// is none. As in pflag, the last occurrence wins.
+// is none. As in pflag, the last occurrence wins. Unlike hasNoColorFlag
+// there is no safe direction to err in here, so "--" is simply taken as the
+// end of the flags; in the rare case it was a flag's value, a --config
+// after it is missed and the default config's colors are used.
 func configPathFromArgs(args []string) string {
 	path := ""
 	for i, arg := range args {
@@ -108,20 +111,21 @@ func configPathFromArgs(args []string) string {
 }
 
 // hasNoColorFlag reports whether args carries --no-color (or
-// --no-color=<true-ish>) before a "--" terminator. Mirrors pflag's bool
-// parsing closely enough for a best-effort scan: the last occurrence wins,
-// and an unparsable value counts as set, since the user plainly asked for
-// no colors.
+// --no-color=<true-ish>). Mirrors pflag's bool parsing closely enough for a
+// best-effort scan: the last occurrence wins, and an unparsable value
+// counts as set, since the user plainly asked for no colors.
 //
-// Known and accepted imprecision: a raw scan cannot tell a flag from
-// another flag's value, so `-d --no-color` (a description that is literally
-// "--no-color") also counts. That errs toward plain output -- an uncolored
-// help or error line, never a stray escape sequence.
+// A raw scan cannot know what pflag will make of each token: `-d
+// --no-color` is a description, and "--" is either the end of the flags or
+// just some flag's value. Every such doubt is resolved toward plain output
+// -- an uncolored help or error line, never a stray escape sequence: a
+// flag's value that reads --no-color counts, and after a "--" the flag can
+// still be switched on but no longer off.
 func hasNoColorFlag(args []string) bool {
-	set := false
+	set, terminated := false, false
 	for _, arg := range args {
 		if arg == "--" {
-			break
+			terminated = true
 		}
 		if arg == "--no-color" {
 			set = true
@@ -129,7 +133,7 @@ func hasNoColorFlag(args []string) bool {
 		if value, ok := strings.CutPrefix(arg, "--no-color="); ok {
 			switch strings.ToLower(value) {
 			case "false", "0", "f":
-				set = false
+				set = set && terminated
 			default:
 				set = true
 			}
@@ -148,8 +152,9 @@ func FormatError(theme ansi.Theme, err error) string {
 // InstallColorHelp makes root (and, through cobra's inheritance, every
 // subcommand) render its help text through ColorizeHelp. theme is called
 // with the command whose help is being printed, and only when help is
-// actually printed -- by then cobra has parsed that command's flags, so the
-// callback can honor its --no-color and --config.
+// actually printed, so it can consult flags cobra has parsed by then. Note
+// that those are not always cmd's own: `<cmd> --help` parses cmd's flags,
+// but `help <cmd>` parses the help command's.
 func InstallColorHelp(root *cobra.Command, theme func(cmd *cobra.Command) ansi.Theme) {
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		_, _ = io.WriteString(cmd.OutOrStdout(), ColorizeHelp(theme(cmd), plainHelp(cmd)))
