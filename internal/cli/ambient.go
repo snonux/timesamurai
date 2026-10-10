@@ -20,26 +20,42 @@ import (
 	"github.com/snonux/timesamurai/internal/pathutil"
 )
 
-// AmbientTheme resolves the color theme for output going to file (os.Stdout
-// for help, os.Stderr for errors) from the same inputs a work subcommand
-// uses: NO_COLOR, --no-color, report.color, CLICOLOR_FORCE, whether file is
-// a terminal, and the [colors] palette.
+// AmbientInputs is what AmbientTheme resolves a theme from.
+type AmbientInputs struct {
+	// ConfigPath is --config as cobra parsed it ("" when absent or when
+	// parsing never got that far).
+	ConfigPath string
+	// NoColor is --no-color as cobra parsed it on the command being
+	// reported on (false when absent or when parsing never got that far).
+	NoColor bool
+	// Args are the raw command-line arguments, scanned for --config and
+	// --no-color as a fallback for the two parsed values above.
+	Args []string
+	// File is the stream being written to: os.Stdout for help, os.Stderr
+	// for errors. nil counts as "not a terminal".
+	File *os.File
+}
+
+// AmbientTheme resolves the color theme for help or error output from the
+// same inputs a work subcommand uses: NO_COLOR, --no-color, report.color,
+// CLICOLOR_FORCE, whether the stream is a terminal, and the [colors]
+// palette.
 //
-// It never fails and never writes anything. args is scanned for --no-color
-// and --config rather than relying on a parsed flag set, because the error
-// being reported may be a flag-parsing error (which leaves later flags
-// unparsed) and cobra stops parsing at --help; configPath, the parsed
-// --config value, wins when cobra did get that far. A config that does not
-// load (possibly the very error being reported) falls back to the built-in
+// It never fails and never writes anything. The parsed flag values are used
+// when cobra produced them, and the raw args are scanned as well because
+// the error being reported may be a flag-parsing error, which leaves the
+// flags after the offending one unparsed. A config that does not load
+// (possibly the very error being reported) falls back to the built-in
 // defaults, so a broken config.toml still gets a readable, default-styled
 // error.
-func AmbientTheme(configPath string, args []string, file *os.File) ansi.Theme {
+func AmbientTheme(in AmbientInputs) ansi.Theme {
+	configPath := in.ConfigPath
 	if configPath == "" {
-		configPath = configPathFromArgs(args)
+		configPath = configPathFromArgs(in.Args)
 	}
 	cfg := loadAmbientConfig(configPath)
-	enabled := cfg.Report.Color && !hasNoColorFlag(args)
-	theme, err := ansi.NewTheme(ansi.ShouldEnable(enabled, file, os.Getenv), cfg.Colors.Palette)
+	enabled := cfg.Report.Color && !in.NoColor && !hasNoColorFlag(in.Args)
+	theme, err := ansi.NewTheme(ansi.ShouldEnable(enabled, in.File, os.Getenv), cfg.Colors.Palette)
 	if err != nil {
 		// Unreachable for a config that loaded (it validates [colors]), but
 		// the zero Theme -- disabled -- is the safe answer regardless.
@@ -74,48 +90,52 @@ func loadAmbientConfig(configPath string) config.Config {
 
 // configPathFromArgs returns the --config value from raw args ("--config
 // <path>" or "--config=<path>", before a "--" terminator), or "" when there
-// is none.
+// is none. As in pflag, the last occurrence wins.
 func configPathFromArgs(args []string) string {
+	path := ""
 	for i, arg := range args {
 		if arg == "--" {
-			return ""
+			break
 		}
 		if arg == "--config" && i+1 < len(args) {
-			return args[i+1]
+			path = args[i+1]
 		}
 		if value, ok := strings.CutPrefix(arg, "--config="); ok {
-			return value
+			path = value
 		}
 	}
-	return ""
+	return path
 }
 
 // hasNoColorFlag reports whether args carries --no-color (or
 // --no-color=<true-ish>) before a "--" terminator. Mirrors pflag's bool
-// parsing closely enough for a best-effort scan: an unparsable value counts
-// as set, since the user plainly asked for no colors.
+// parsing closely enough for a best-effort scan: the last occurrence wins,
+// and an unparsable value counts as set, since the user plainly asked for
+// no colors.
 //
 // Known and accepted imprecision: a raw scan cannot tell a flag from
 // another flag's value, so `-d --no-color` (a description that is literally
-// "--no-color") also counts. The scan errs toward plain output -- the worst
-// case is an uncolored help or error line, never a stray escape sequence.
+// "--no-color") also counts. That errs toward plain output -- an uncolored
+// help or error line, never a stray escape sequence.
 func hasNoColorFlag(args []string) bool {
+	set := false
 	for _, arg := range args {
 		if arg == "--" {
-			return false
+			break
 		}
 		if arg == "--no-color" {
-			return true
+			set = true
 		}
 		if value, ok := strings.CutPrefix(arg, "--no-color="); ok {
 			switch strings.ToLower(value) {
 			case "false", "0", "f":
-				return false
+				set = false
+			default:
+				set = true
 			}
-			return true
 		}
 	}
-	return false
+	return set
 }
 
 // FormatError renders the final error line main prints: the "Error:" label
@@ -126,11 +146,13 @@ func FormatError(theme ansi.Theme, err error) string {
 }
 
 // InstallColorHelp makes root (and, through cobra's inheritance, every
-// subcommand) render its help text through ColorizeHelp. theme is a function
-// so the theme is resolved only when help is actually printed.
-func InstallColorHelp(root *cobra.Command, theme func() ansi.Theme) {
+// subcommand) render its help text through ColorizeHelp. theme is called
+// with the command whose help is being printed, and only when help is
+// actually printed -- by then cobra has parsed that command's flags, so the
+// callback can honor its --no-color and --config.
+func InstallColorHelp(root *cobra.Command, theme func(cmd *cobra.Command) ansi.Theme) {
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-		_, _ = io.WriteString(cmd.OutOrStdout(), ColorizeHelp(theme(), plainHelp(cmd)))
+		_, _ = io.WriteString(cmd.OutOrStdout(), ColorizeHelp(theme(cmd), plainHelp(cmd)))
 	})
 }
 
@@ -140,9 +162,11 @@ func InstallColorHelp(root *cobra.Command, theme func() ansi.Theme) {
 // the default help func because that one only writes to cmd's own output:
 // capturing it would mean swapping cmd's writer, and cobra offers no way to
 // swap it back to "inherit from parent". UsageString is cobra's own
-// buffer-returning API and does restore the writer. TestPlainHelpMatchesCobra
-// pins the equivalence for every command, so a cobra upgrade that changes
-// the default layout fails loudly instead of drifting.
+// buffer-returning API and does restore the writer. The equivalence is
+// pinned for every command of the real tree by main's
+// TestHelpMatchesCobraDefaultForEveryCommand (and for the work tree by
+// TestPlainHelpMatchesCobra here), so a cobra upgrade that changes the
+// default layout fails loudly instead of drifting.
 func plainHelp(cmd *cobra.Command) string {
 	var out strings.Builder
 	description := cmd.Long

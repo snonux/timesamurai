@@ -32,8 +32,14 @@ func main() {
 // reportError prints the final "Error: ..." line to stderr, its label
 // styled by the ambient theme resolved against stderr (see
 // internal/cli/ambient.go for why errors cannot use a command's own theme).
+// args are the raw arguments root was executed with: after a flag-parsing
+// error they are the only place a later --no-color or --config can be seen.
 func reportError(stderr *os.File, root *cobra.Command, args []string, err error) {
-	theme := cli.AmbientTheme(parsedConfigPath(root), args, stderr)
+	theme := cli.AmbientTheme(cli.AmbientInputs{
+		ConfigPath: parsedConfigPath(root),
+		Args:       args,
+		File:       stderr,
+	})
 	_, _ = fmt.Fprintln(stderr, cli.FormatError(theme, err))
 }
 
@@ -42,6 +48,31 @@ func reportError(stderr *os.File, root *cobra.Command, args []string, err error)
 func parsedConfigPath(root *cobra.Command) string {
 	configPath, _ := root.PersistentFlags().GetString("config")
 	return configPath
+}
+
+// helpStream is the stream whose terminal-ness decides whether --help is
+// colored. A variable only so tests, which capture help in a buffer, are
+// independent of whether `go test` itself is attached to a terminal.
+var helpStream = os.Stdout
+
+// newRoot builds the command tree main executes: buildRoot's tree with
+// colored --help installed.
+func newRoot() *cobra.Command {
+	root := buildRoot()
+	// Help is printed outside any work subcommand's runtime, so it resolves
+	// its own best-effort theme (internal/cli/ambient.go). cobra has parsed
+	// the flags of the command being helped by the time this runs, so the
+	// parsed --no-color/--config are authoritative; no raw-args fallback is
+	// needed here, unlike in reportError.
+	cli.InstallColorHelp(root, func(cmd *cobra.Command) ansi.Theme {
+		noColor, _ := cmd.Flags().GetBool("no-color")
+		return cli.AmbientTheme(cli.AmbientInputs{
+			ConfigPath: parsedConfigPath(root),
+			NoColor:    noColor,
+			File:       helpStream,
+		})
+	})
+	return root
 }
 
 // handleLegacyVersionFlag prints the version and reports true when args is
@@ -59,7 +90,9 @@ func handleLegacyVersionFlag(args []string, out io.Writer) bool {
 	return true
 }
 
-func newRoot() *cobra.Command {
+// buildRoot builds the command tree with cobra's default (plain) help; it
+// exists separately from newRoot so tests can compare the two.
+func buildRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "timesamurai",
 		Short:         "Worktime tracking tool",
@@ -84,18 +117,11 @@ func newRoot() *cobra.Command {
 	// docs/configuration.md (flags beat TIMESAMURAI_* beat the file).
 	root.PersistentFlags().String("config", "", "path to config.toml (default: $XDG_CONFIG_HOME/timesamurai/config.toml)")
 
-	// --no-color is registered here as well as on `work` (which keeps its
-	// own so the work tree stays usable standalone, as the cli tests build
-	// it): now that --help is colored at every level, the off switch has to
-	// be accepted at every level too, including `timesamurai --help` and
-	// `timesamurai completion --help`.
-	root.PersistentFlags().Bool("no-color", false, "disable all terminal colors (also honors NO_COLOR and report.color=false)")
-
-	// Help is printed outside any work subcommand's runtime, so it resolves
-	// its own best-effort theme against stdout (internal/cli/ambient.go).
-	cli.InstallColorHelp(root, func() ansi.Theme {
-		return cli.AmbientTheme(parsedConfigPath(root), os.Args[1:], os.Stdout)
-	})
+	// --no-color is registered here as well as on `work`: now that --help
+	// is colored at every level, the off switch has to be accepted at every
+	// level too, including `timesamurai --help` and `timesamurai completion
+	// --help`.
+	cli.RegisterNoColorFlag(root)
 
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newCompletionCmd())

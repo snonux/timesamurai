@@ -58,8 +58,8 @@ Booleans accept `true` / `false` / `yes` / `no` / `1` / `0` / `on` / `off`
 ## Terminal colors (tasks n9, m83)
 
 All text output is colored: the report (day labels, category keys and
-values, week separators, balances), every `list`/`search` table column,
-mutation confirmations, warnings, the final `Error:` line, and the headings,
+values, week separators, balances), the `list`/`search` table (every column
+except the free-text description), mutation confirmations, warnings, the final `Error:` line, and the headings,
 command names and flags in `--help`. Machine-readable output (`--format
 json`, `--version`, completion scripts) is never colored, and with colors
 off every command prints exactly the same text, minus the escape sequences.
@@ -78,9 +78,8 @@ Two surfaces are styled outside a command's normal run: `--help` and the
 final `Error:` line. They read the config strictly read-only (no legacy
 `config.json` migration) and fall back to the default palette when the
 config cannot be loaded, so a broken `config.toml` still produces a readable
-error. cobra's own `Unknown help topic` message and the legacy-config notice
-(printed before the config, and therefore the color settings, are known)
-stay plain.
+error. The legacy-config notice (printed before the config, and therefore
+the color settings, are known) stays plain.
 
 The `[colors]` section remaps which style each semantic role uses:
 

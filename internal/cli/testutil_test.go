@@ -10,6 +10,17 @@ import (
 	"github.com/snonux/timesamurai/internal/worktime"
 )
 
+// TestMain makes the whole package independent of whether `go test` is
+// attached to a terminal: commands write to in-memory buffers here, but the
+// color decision looks at the process's real stdout/stderr, so a test run
+// from an interactive shell would otherwise color every "plain" expectation.
+// With no streams, colors are on only when a test forces them
+// (CLICOLOR_FORCE).
+func TestMain(m *testing.M) {
+	outputStreams = func() (stdout, stderr *os.File) { return nil, nil }
+	os.Exit(m.Run())
+}
+
 // newScratchStore returns a directory this test alone owns, and points
 // XDG_CONFIG_HOME at another scratch directory with no config.toml in it --
 // so config.Load falls back to built-in defaults rather than ever reading
@@ -19,9 +30,10 @@ import (
 func newScratchStore(t *testing.T) string {
 	t.Helper()
 	// Hermetic color environment (task n9): neutralize ambient color env so
-	// a developer's CLICOLOR_FORCE=1 or a TTY-attached test run cannot leak
-	// escapes into the exact-output assertions across this package. Style
-	// tests opt back in with t.Setenv after this call.
+	// a developer's CLICOLOR_FORCE=1 cannot leak escapes into the
+	// exact-output assertions across this package. Style tests opt back in
+	// with t.Setenv after this call. (A TTY-attached test run is handled
+	// separately, by TestMain.)
 	t.Setenv("CLICOLOR_FORCE", "")
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TIMESAMURAI_COLOR", "")

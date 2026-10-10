@@ -31,6 +31,10 @@ func TestHasNoColorFlag(t *testing.T) {
 		// Documented imprecision: a raw scan cannot tell a flag from another
 		// flag's value, and deliberately errs toward plain output.
 		{"flag value that is literally the flag", []string{"-d", "--no-color"}, true},
+		// As in pflag, the last occurrence wins -- in both directions.
+		{"false then bare", []string{"--no-color=false", "work", "--bogus", "--no-color"}, true},
+		{"bare then false", []string{"--no-color", "--no-color=false"}, false},
+		{"set before terminator, unset after", []string{"--no-color", "--", "--no-color=false"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -47,18 +51,21 @@ func TestHasNoColorFlag(t *testing.T) {
 func TestAmbientThemeFollowsTheStandardSwitches(t *testing.T) {
 	newScratchStore(t) // empty XDG_CONFIG_HOME, neutral color env
 
-	if AmbientTheme("", nil, nil).Enabled() {
+	if AmbientTheme(AmbientInputs{}).Enabled() {
 		t.Error("enabled without a terminal or CLICOLOR_FORCE")
 	}
 	t.Setenv("CLICOLOR_FORCE", "1")
-	if !AmbientTheme("", []string{"work", "report"}, nil).Enabled() {
+	if !AmbientTheme(AmbientInputs{Args: []string{"work", "report"}}).Enabled() {
 		t.Error("CLICOLOR_FORCE did not enable the ambient theme")
 	}
-	if AmbientTheme("", []string{"work", "report", "--no-color"}, nil).Enabled() {
-		t.Error("--no-color did not disable the ambient theme")
+	if AmbientTheme(AmbientInputs{Args: []string{"work", "report", "--no-color"}}).Enabled() {
+		t.Error("--no-color in the raw args did not disable the ambient theme")
+	}
+	if AmbientTheme(AmbientInputs{NoColor: true}).Enabled() {
+		t.Error("parsed --no-color did not disable the ambient theme")
 	}
 	t.Setenv("NO_COLOR", "1")
-	if AmbientTheme("", nil, nil).Enabled() {
+	if AmbientTheme(AmbientInputs{}).Enabled() {
 		t.Error("NO_COLOR did not disable the ambient theme")
 	}
 }
@@ -72,13 +79,13 @@ func TestAmbientThemeReadsConfig(t *testing.T) {
 
 	off := filepath.Join(dir, "off.toml")
 	writeFile(t, off, "[report]\ncolor = false\n")
-	if AmbientTheme(off, nil, nil).Enabled() {
+	if AmbientTheme(AmbientInputs{ConfigPath: off}).Enabled() {
 		t.Error("report.color=false did not disable the ambient theme")
 	}
 
 	themed := filepath.Join(dir, "themed.toml")
 	writeFile(t, themed, "[colors]\nerror = \"bold brightred\"\n")
-	got := FormatError(AmbientTheme(themed, nil, nil), errors.New("boom"))
+	got := FormatError(AmbientTheme(AmbientInputs{ConfigPath: themed}), errors.New("boom"))
 	if want := "\x1b[1;91mError:\x1b[0m boom"; got != want {
 		t.Errorf("FormatError with palette override = %q, want %q", got, want)
 	}
@@ -98,13 +105,13 @@ func TestAmbientThemeSurvivesBrokenConfig(t *testing.T) {
 	} {
 		path := filepath.Join(dir, name)
 		writeFile(t, path, content)
-		got := FormatError(AmbientTheme(path, nil, nil), errors.New("boom"))
+		got := FormatError(AmbientTheme(AmbientInputs{ConfigPath: path}), errors.New("boom"))
 		if want := "\x1b[31mError:\x1b[0m boom"; got != want {
 			t.Errorf("%s: FormatError = %q, want default-styled %q", name, got, want)
 		}
 	}
 	missing := filepath.Join(dir, "does-not-exist.toml")
-	if !AmbientTheme(missing, nil, nil).Enabled() {
+	if !AmbientTheme(AmbientInputs{ConfigPath: missing}).Enabled() {
 		t.Error("missing --config file disabled the ambient theme")
 	}
 }
@@ -217,8 +224,10 @@ func runHelp(t *testing.T, root *cobra.Command, args ...string) string {
 }
 
 // TestPlainHelpMatchesCobra pins plainHelp (our rebuild of cobra's default
-// help layout) against cobra's own default help func for every command in
-// the tree, so a cobra upgrade that changes the layout fails here.
+// help layout) against cobra's own default help func for the work tree, so
+// a cobra upgrade that changes the layout fails here. The real root, with
+// its own flags and the completion/help commands, is covered the same way
+// by cmd/timesamurai's TestHelpMatchesCobraDefaultForEveryCommand.
 func TestPlainHelpMatchesCobra(t *testing.T) {
 	newScratchStore(t)
 	paths := [][]string{{}, {"work"}}
@@ -230,7 +239,7 @@ func TestPlainHelpMatchesCobra(t *testing.T) {
 		want := runHelp(t, helpTree(), args...)
 
 		ours := helpTree()
-		InstallColorHelp(ours, func() ansi.Theme { return ansi.Theme{} })
+		InstallColorHelp(ours, func(*cobra.Command) ansi.Theme { return ansi.Theme{} })
 		if got := runHelp(t, ours, args...); got != want {
 			t.Errorf("%v: help differs from cobra's default:\n got %q\nwant %q", args, got, want)
 		}
@@ -246,7 +255,7 @@ func TestInstallColorHelpStylesSubcommandHelp(t *testing.T) {
 	newScratchStore(t)
 	root := helpTree()
 	resolved := 0
-	InstallColorHelp(root, func() ansi.Theme { resolved++; return enabledTheme(t) })
+	InstallColorHelp(root, func(*cobra.Command) ansi.Theme { resolved++; return enabledTheme(t) })
 	if resolved != 0 {
 		t.Fatalf("theme resolved before help ran")
 	}
@@ -280,7 +289,7 @@ func TestAmbientThemeNeverWritesConfig(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(dir, "config.json"), `{"weekworkhours": 40}`)
 
-	AmbientTheme("", []string{"--help"}, nil)
+	AmbientTheme(AmbientInputs{Args: []string{"--help"}})
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -300,20 +309,24 @@ func TestAmbientThemeFindsConfigInRawArgs(t *testing.T) {
 	off := filepath.Join(t.TempDir(), "off.toml")
 	writeFile(t, off, "[report]\ncolor = false\n")
 
+	on := filepath.Join(t.TempDir(), "on.toml")
+	writeFile(t, on, "[report]\ncolor = true\n")
 	for name, args := range map[string][]string{
 		"separate value": {"work", "--bogus", "--config", off},
 		"equals value":   {"work", "--bogus", "--config=" + off},
+		"last one wins":  {"--config", on, "work", "--config=" + off},
 	} {
-		if AmbientTheme("", args, nil).Enabled() {
+		if AmbientTheme(AmbientInputs{Args: args}).Enabled() {
 			t.Errorf("%s: --config in raw args was ignored", name)
 		}
 	}
 	for name, args := range map[string][]string{
 		"after terminator": {"work", "--", "--config", off},
+		"last one wins":    {"--config", off, "work", "--config=" + on},
 		"missing value":    {"work", "--config"},
 		"absent":           {"work", "report"},
 	} {
-		if !AmbientTheme("", args, nil).Enabled() {
+		if !AmbientTheme(AmbientInputs{Args: args}).Enabled() {
 			t.Errorf("%s: theme should use the default config", name)
 		}
 	}

@@ -168,7 +168,8 @@ func (t Theme) Wrap(role, text string) string {
 	return "\x1b[" + code + "m" + text + "\x1b[0m"
 }
 
-// ShouldEnable resolves the standard color enabling precedence for stdout.
+// ShouldEnable resolves the standard color enabling precedence for one
+// output stream (the CLI calls it once for stdout and once for stderr).
 // cfgEnabled is the config/env master switch (report.color);
 // getenv is injected so tests can simulate the environment; file may be nil
 // in tests, which counts as "not a terminal".

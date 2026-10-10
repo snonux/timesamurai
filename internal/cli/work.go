@@ -24,7 +24,7 @@ func NewWorkCmd() *cobra.Command {
 	cmd.PersistentFlags().String("db", "", "override the legacy worktime.rb JSON directory (storage.db_dir)")
 	cmd.PersistentFlags().String("store", "", "override the JSONL store directory (storage.store_dir)")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "print full entry details instead of a one-line confirmation")
-	cmd.PersistentFlags().Bool("no-color", false, "disable all terminal colors (also honors NO_COLOR and report.color=false)")
+	RegisterNoColorFlag(cmd)
 
 	// 071: worktime.rb's legacy flags (--login, -a TIME, --what, ...) live as
 	// local flags on this command itself, so a bare `work --login ...` with
@@ -77,4 +77,14 @@ func NewWorkCmd() *cobra.Command {
 		newImportCmd(),
 	)
 	return cmd
+}
+
+// RegisterNoColorFlag adds the persistent --no-color flag to cmd. It is
+// registered both on `work` (so the work tree is usable standalone, as this
+// package's tests build it) and by main on the root (so every other command
+// and its --help accepts it too); sharing this one definition keeps the two
+// from drifting. Where both exist, cobra lets the nearer one -- work's --
+// shadow the root's for the work tree.
+func RegisterNoColorFlag(cmd *cobra.Command) {
+	cmd.PersistentFlags().Bool("no-color", false, "disable all terminal colors (also honors NO_COLOR and report.color=false)")
 }

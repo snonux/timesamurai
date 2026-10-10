@@ -9,8 +9,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/snonux/timesamurai/internal"
 )
+
+// TestMain makes the help tests independent of whether `go test` is attached
+// to a terminal: help is captured in buffers, but its color decision looks
+// at helpStream. With no stream, help is colored only when a test forces it
+// (CLICOLOR_FORCE).
+func TestMain(m *testing.M) {
+	helpStream = nil
+	os.Exit(m.Run())
+}
 
 func TestRootHelp(t *testing.T) {
 	root := newRoot()
@@ -232,26 +243,88 @@ func TestRootHelpColoredWhenForcedAndOffSwitchesWork(t *testing.T) {
 	}
 }
 
-// TestNoColorFlagAcceptedAtEveryLevel: --no-color must parse on the root
-// and on non-work commands too, since their help is colored as well (it
-// used to exist only under `work`, making `timesamurai --help --no-color`
-// an unknown-flag error).
-func TestNoColorFlagAcceptedAtEveryLevel(t *testing.T) {
+// TestNoColorFlagUncolorsHelpAtEveryLevel: --no-color must parse on the
+// root and on non-work commands too, since their help is colored as well
+// (it used to exist only under `work`, making `timesamurai --help
+// --no-color` an unknown-flag error) -- and, through newRoot's own wiring,
+// it must actually win over CLICOLOR_FORCE wherever it is placed.
+func TestNoColorFlagUncolorsHelpAtEveryLevel(t *testing.T) {
 	hermeticColorEnv(t)
+	t.Setenv("CLICOLOR_FORCE", "1")
 	for _, args := range [][]string{
 		{"--no-color", "--help"},
 		{"--help", "--no-color"},
 		{"completion", "--no-color", "--help"},
 		{"work", "--no-color", "list", "--help"},
+		{"--no-color", "work", "list", "--help"},
+		{"work", "list", "--help", "--no-color=true"},
 		{"--no-color"},
 	} {
-		if out, err := runRoot(t, args...); err != nil || !strings.Contains(out, "Usage:") {
+		out, err := runRoot(t, args...)
+		if err != nil || !strings.Contains(out, "Usage:") {
 			t.Errorf("%v: err=%v out=%q", args, err, out)
 		}
+		if strings.ContainsRune(out, '\x1b') {
+			t.Errorf("%v: help still colored: %q", args, out)
+		}
 	}
-	// Negative: a misspelled variant is still rejected.
+	// Negatives: an explicit false keeps the forced colors, and a
+	// misspelled variant is still rejected.
+	if out, err := runRoot(t, "--no-color=false", "--help"); err != nil || !strings.ContainsRune(out, '\x1b') {
+		t.Errorf("--no-color=false: err=%v, help not colored: %q", err, out)
+	}
 	if _, err := runRoot(t, "--no-colour", "--help"); err == nil {
 		t.Error("--no-colour was accepted")
+	}
+}
+
+// commandPaths returns the argument path of every command in cmd's tree,
+// hidden ones and cobra's generated help/completion commands included.
+func commandPaths(cmd *cobra.Command, prefix []string) [][]string {
+	paths := [][]string{prefix}
+	for _, sub := range cmd.Commands() {
+		paths = append(paths, commandPaths(sub, append(append([]string{}, prefix...), sub.Name()))...)
+	}
+	return paths
+}
+
+// TestHelpMatchesCobraDefaultForEveryCommand compares the real tree's help
+// (newRoot, colors off) with the same tree's help under cobra's default
+// help func (buildRoot) for every command, both as `<cmd> --help` and as
+// `help <cmd>`. cli.plainHelp rebuilds cobra's layout by hand; this is what
+// makes a cobra upgrade that changes it fail loudly.
+func TestHelpMatchesCobraDefaultForEveryCommand(t *testing.T) {
+	hermeticColorEnv(t)
+	run := func(root *cobra.Command, args []string) string {
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+	// Execute once so cobra adds its generated help command to the tree.
+	probe := buildRoot()
+	run(probe, []string{"--help"})
+	paths := commandPaths(probe, nil)
+	if len(paths) < 20 {
+		t.Fatalf("only %d commands found; the tree walk is broken", len(paths))
+	}
+	for _, path := range paths {
+		for _, args := range [][]string{
+			append(append([]string{}, path...), "--help"),
+			append([]string{"help"}, path...),
+		} {
+			want := run(buildRoot(), args)
+			if got := run(newRoot(), args); got != want {
+				t.Errorf("%v: help differs from cobra's default:\n got %q\nwant %q", args, got, want)
+			}
+			if !strings.Contains(want, "Usage:") {
+				t.Errorf("%v: not a help text: %q", args, want)
+			}
+		}
 	}
 }
 
@@ -315,6 +388,10 @@ func TestReportError(t *testing.T) {
 	}
 	if got := report("work", "--nosuchflag", "--no-color"); !strings.HasPrefix(got, "Error: unknown flag") {
 		t.Errorf("--no-color after a flag error still colored: %q", got)
+	}
+	// Last occurrence wins, as in pflag: an earlier =false does not undo it.
+	if got := report("--no-color=false", "work", "--nosuchflag", "--no-color"); !strings.HasPrefix(got, "Error: unknown flag") {
+		t.Errorf("later --no-color lost to an earlier --no-color=false: %q", got)
 	}
 }
 

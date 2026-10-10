@@ -47,6 +47,6 @@ func printStatus(cmd *cobra.Command, theme ansi.Theme, open []worktime.OpenSessi
 	for _, s := range open {
 		_, _ = fmt.Fprintf(w, "%s: open on %s since %s\n",
 			theme.Wrap(ansi.RoleSuccess, s.Category), theme.Wrap(ansi.RoleAddress, s.Host),
-			theme.Wrap(ansi.RoleTime, s.Since.Format("2006-01-02 15:04:05")))
+			theme.Wrap(ansi.RoleTime, s.Since.Format(worktime.DisplayTimeLayout)))
 	}
 }

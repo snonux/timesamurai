@@ -51,10 +51,10 @@ func newLineStyleWriter(w io.Writer, theme ansi.Theme, pick func(line string) st
 // Write styles one Write call line by line, so a multi-line write (the
 // export discard banner) never has one escape sequence spanning a newline --
 // which pagers and line-oriented tools handle badly -- and keeps each line's
-// indentation outside the escapes, so an underline style does not underline
-// it. Callers write whole lines (fmt.Fprintf / io.WriteString of
-// "\n"-terminated text at every call site), so no cross-call line buffering
-// is needed.
+// surrounding whitespace (indentation, a trailing "\r") outside the
+// escapes, so an underline style does not underline it. Callers write whole
+// lines (fmt.Fprintf / io.WriteString of "\n"-terminated text at every call
+// site), so no cross-call line buffering is needed.
 //
 // A failed underlying write is reported exactly as the unwrapped writer
 // would report it (the legacy package checks these errors), with n = 0
@@ -63,9 +63,10 @@ func newLineStyleWriter(w io.Writer, theme ansi.Theme, pick func(line string) st
 func (c *lineStyleWriter) Write(p []byte) (int, error) {
 	lines := strings.Split(string(p), "\n")
 	for i, line := range lines {
-		text := strings.TrimLeft(line, " ")
-		indent := line[:len(line)-len(text)]
-		lines[i] = indent + c.theme.Wrap(c.pick(line), text)
+		rest := strings.TrimLeft(line, " \t")
+		indent := line[:len(line)-len(rest)]
+		text := strings.TrimRight(rest, " \t\r")
+		lines[i] = indent + c.theme.Wrap(c.pick(line), text) + rest[len(text):]
 	}
 	if _, err := io.WriteString(c.w, strings.Join(lines, "\n")); err != nil {
 		return 0, err
@@ -183,8 +184,8 @@ func colorizeReportToken(theme ansi.Theme, token string) string {
 // the address column is styled, never the descr free-text. After tabwriter
 // alignment the row's cells are space-separated, so the anchor (line start)
 // plus the mandatory ":<digits>" tail is what keeps the timestamp column's
-// "00:13:20" from ever matching. It is the fallback for a line whose cells
-// cannot be located (see colorizeTableRow).
+// "00:13:20" from ever matching. It is the fallback for a line that is not
+// a located row (see colorizeTableAddress).
 var tableAddressRe = regexp.MustCompile(`^(\S+:\d+)`)
 
 // tableCellRoles lists the role of each FormatTable column that gets one,
@@ -200,62 +201,77 @@ var tableCellRoles = []string{
 // there is nothing else to style.) Post-processing after alignment means
 // the escape sequences cannot disturb tabwriter's width math.
 //
-// rows must be the rows table was rendered from: each row's known cell
+// rows must be the rows table was rendered from. Each row's known cell
 // texts are located in its line rather than slicing at fixed column
-// offsets, because a descr containing a newline ends tabwriter's column
-// block and re-aligns every later row to different widths.
+// offsets, because free text containing one of tabwriter's terminators
+// (a newline or form feed in a descr or tag) ends the column block and
+// re-aligns every later row to different widths. Rows are matched to lines
+// in order: a line that does not start with the next row's cells is a
+// continuation of the previous row's free text, not a row.
 func colorizeTable(theme ansi.Theme, table string, rows []worktime.Row) string {
 	if !theme.Enabled() || table == "" {
 		return table
 	}
-	lines := strings.Split(table, "\n")
-	rowCells := tableRowCells(lines, rows)
 	var out strings.Builder
-	for i, line := range lines {
+	next := 0 // index of the row whose line is expected next
+	for i, line := range strings.Split(table, "\n") {
 		switch {
 		case i == 0:
 			out.WriteString(theme.Wrap(ansi.RoleHeader, line))
-		case line != "":
-			out.WriteString(colorizeTableRow(theme, line, rowCells[i]))
-		default:
+		case line == "":
 			out.WriteString(line)
+		default:
+			styled, isRow := "", false
+			if next < len(rows) {
+				styled, isRow = colorizeTableRow(theme, line, tableRowCells(rows[next]))
+			}
+			if isRow {
+				next++
+			} else {
+				styled = colorizeTableAddress(theme, line)
+			}
+			out.WriteString(styled)
 		}
 		out.WriteString("\n")
 	}
 	return strings.TrimSuffix(out.String(), "\n")
 }
 
-// tableRowCells maps each line index of a FormatTable rendering to the
-// styled-column cell texts of the row that starts on it. A row occupies one
-// line plus one per newline in its descr; those continuation lines (and the
-// header) get no entry, so they are never mistaken for rows.
-func tableRowCells(lines []string, rows []worktime.Row) map[int][]string {
-	cells := make(map[int][]string, len(rows))
-	at := 1 // line 0 is the header
-	for _, row := range rows {
-		if at >= len(lines) {
-			break
-		}
-		cells[at] = []string{
-			row.Address,
-			row.Entry.Action,
-			time.Unix(row.Entry.Epoch, 0).Format("2006-01-02 15:04:05"),
-			strconv.FormatInt(row.Entry.Value, 10),
-			strings.Join(row.Entry.Tags, ","),
-		}
-		at += 1 + strings.Count(row.Entry.Descr, "\n")
+// tabwriterTerminators are the characters text/tabwriter treats as ending a
+// cell ("\t", "\v") or a line ("\n", "\f"), so a field containing one is
+// not rendered as one contiguous cell.
+const tabwriterTerminators = "\t\v\n\f"
+
+// tableRowCells returns the text of row's styled-column cells as they
+// appear on the row's first rendered line, in tableCellRoles order. A field
+// containing a tabwriter terminator (a tag with a newline, say) is cut
+// there and ends the list: what follows it is rendered in another cell or
+// on another line, where it cannot be located reliably, so those cells
+// simply stay plain.
+func tableRowCells(row worktime.Row) []string {
+	fields := []string{
+		row.Address,
+		row.Entry.Action,
+		time.Unix(row.Entry.Epoch, 0).Format(worktime.DisplayTimeLayout),
+		strconv.FormatInt(row.Entry.Value, 10),
+		strings.Join(row.Entry.Tags, ","),
 	}
-	return cells
+	for i, field := range fields {
+		if cut := strings.IndexAny(field, tabwriterTerminators); cut >= 0 {
+			fields[i] = field[:cut]
+			return fields[:i+1]
+		}
+	}
+	return fields
 }
 
 // colorizeTableRow styles one row line by walking its known cell texts left
 // to right: each must appear next, after the padding that follows the
-// previous cell. Only the cell text is wrapped; padding and the trailing
-// descr stay outside the escapes. If a cell is not where it should be
-// (cells is nil for a descr continuation line, or the rendering and rows
-// disagree), nothing is guessed: the line falls back to n9's behavior of
-// styling just a leading address, which a continuation line rarely has.
-func colorizeTableRow(theme ansi.Theme, line string, cells []string) string {
+// previous cell. Only the cell text is wrapped; padding and everything
+// after the last located cell (the descr) stay outside the escapes. It
+// reports false, styling nothing, when a cell is not where it should be --
+// the line is then not this row's.
+func colorizeTableRow(theme ansi.Theme, line string, cells []string) (string, bool) {
 	var out strings.Builder
 	rest := line
 	for i, cell := range cells {
@@ -265,16 +281,19 @@ func colorizeTableRow(theme ansi.Theme, line string, cells []string) string {
 			rest = text
 		}
 		if !strings.HasPrefix(rest, cell) {
-			cells = nil
-			break
+			return "", false
 		}
 		out.WriteString(theme.Wrap(tableCellRoles[i], cell))
 		rest = rest[len(cell):]
 	}
-	if cells == nil {
-		return tableAddressRe.ReplaceAllStringFunc(line, func(address string) string {
-			return theme.Wrap(ansi.RoleAddress, address)
-		})
-	}
-	return out.String() + rest
+	return out.String() + rest, true
+}
+
+// colorizeTableAddress is the fallback for a line that is not a located
+// row: n9's behavior of styling just a leading "<host>:<id>", which a
+// continuation line of free text rarely has.
+func colorizeTableAddress(theme ansi.Theme, line string) string {
+	return tableAddressRe.ReplaceAllStringFunc(line, func(address string) string {
+		return theme.Wrap(ansi.RoleAddress, address)
+	})
 }

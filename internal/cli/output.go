@@ -74,7 +74,7 @@ func printEntriesResult(cmd *cobra.Command, theme ansi.Theme, verb string, entri
 // field value is styled by the same role its `work list` column uses (tasks
 // n9 and m83), and the field names are faint so the values stand out.
 func formatEntry(e worktime.Entry, theme ansi.Theme) string {
-	when := time.Unix(e.Epoch, 0).Format("2006-01-02 15:04:05")
+	when := time.Unix(e.Epoch, 0).Format(worktime.DisplayTimeLayout)
 	field := func(name, role, value string) string {
 		return theme.Wrap(ansi.RoleDim, name+"=") + theme.Wrap(role, value)
 	}

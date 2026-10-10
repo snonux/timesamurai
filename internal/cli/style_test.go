@@ -325,6 +325,68 @@ func TestColorizeTableNewlineInDescrKeepsLaterRowsStyled(t *testing.T) {
 	}
 }
 
+// TestColorizeTableTerminatorsInFreeText covers every tabwriter terminator
+// in a descr or a tag (review finding: only "\n" in descr was handled).
+// Whatever the odd row itself looks like, the rows after it must keep full
+// column styling, and the visible text must never change.
+func TestColorizeTableTerminatorsInFreeText(t *testing.T) {
+	theme := enabledTheme(t)
+	last := worktime.Row{Address: "h:9", Entry: worktime.Entry{Host: "h", ID: 9, Action: "logout", Epoch: 1700000900, Value: 7, Tags: []string{"lunch"}, Descr: "after"}}
+	lastStyled := regexp.MustCompile(`\x1b\[36mh:9\x1b\[0m +\x1b\[35mlogout\x1b\[0m +\x1b\[34m[^\x1b]+\x1b\[0m +\x1b\[1m7\x1b\[0m +\x1b\[33mlunch\x1b\[0m +after\n`)
+
+	odd := map[string]worktime.Entry{
+		"form feed in descr":      {Descr: "ff\fform"},
+		"vertical tab in descr":   {Descr: "a\vb"},
+		"tab in descr":            {Descr: "a\tb"},
+		"carriage return":         {Descr: "a\rb"},
+		"trailing newline":        {Descr: "ends\n"},
+		"several newlines":        {Descr: "one\ntwo\n\nfour"},
+		"newline in tag":          {Tags: []string{"ta\ng"}},
+		"form feed in tag":        {Tags: []string{"ta\fg", "x"}},
+		"tab in tag":              {Tags: []string{"ta\tg"}},
+		"tag only a newline":      {Tags: []string{"\n"}},
+		"space in tag":            {Tags: []string{"two words"}},
+		"descr mimics next row":   {Descr: "x\nh:9  logout  nope"},
+		"descr is an address":     {Descr: "h:9"},
+		"descr with leading tabs": {Descr: "\t\tindented"},
+	}
+	for name, entry := range odd {
+		t.Run(name, func(t *testing.T) {
+			entry.Host, entry.ID, entry.Action, entry.Epoch = "my host", 1, "add", 1700000000
+			rows := []worktime.Row{{Address: "my host:1", Entry: entry}, last}
+			plain := worktime.FormatTable(rows)
+			styled := colorizeTable(theme, plain, rows)
+
+			if !strings.Contains(styled, "\n\x1b[36mmy host:1\x1b[0m") {
+				t.Errorf("odd row's address (host with a space) not styled:\n%q", styled)
+			}
+			if !lastStyled.MatchString(styled) {
+				t.Errorf("row after the odd one lost column styling:\n%q", styled)
+			}
+			if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
+				t.Errorf("visible text differs:\n got %q\nwant %q", got, plain)
+			}
+		})
+	}
+}
+
+// TestTableRowCellsCutsAtTerminator pins which cells are located for a row
+// whose field holds a tabwriter terminator: the field is cut there and no
+// later cell is attempted.
+func TestTableRowCellsCutsAtTerminator(t *testing.T) {
+	row := worktime.Row{Address: "h:1", Entry: worktime.Entry{Host: "h", ID: 1, Action: "add", Epoch: 1700000000, Value: -5, Tags: []string{"a", "b\nc"}}}
+	when := time.Unix(1700000000, 0).Format(worktime.DisplayTimeLayout)
+	got := tableRowCells(row)
+	want := []string{"h:1", "add", when, "-5", "a,b"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("tableRowCells = %q, want %q", got, want)
+	}
+	row.Entry.Action = "a\tb"
+	if got := tableRowCells(row); len(got) != 2 || got[1] != "a" {
+		t.Errorf("cells after a terminator in the action = %q, want [h:1 a]", got)
+	}
+}
+
 // TestColorizeTableRowsNotMatchingRenderingFallBack is the negative case
 // for cell location: when the rows handed in are not what the table was
 // rendered from, no cell is guessed -- each line keeps only its address
@@ -374,6 +436,20 @@ func TestLineStyleWriterStylesEachLine(t *testing.T) {
 		t.Fatalf("Write = (%d, %v), want (%d, nil)", n, err, len(text))
 	}
 	want := "\x1b[33mone\x1b[0m\n\x1b[31mbad two\x1b[0m\nplain three\n  \x1b[33mindented\x1b[0m"
+	if buf.String() != want {
+		t.Errorf("styled lines:\n got %q\nwant %q", buf.String(), want)
+	}
+
+	// Tabs, trailing blanks and a CRLF line ending stay outside the escapes
+	// as well, and an empty write produces nothing.
+	buf.Reset()
+	if _, err := w.Write([]byte("\t tabbed \r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := w.Write(nil); n != 0 || err != nil {
+		t.Errorf("empty Write = (%d, %v)", n, err)
+	}
+	want = "\t \x1b[33mtabbed\x1b[0m \r\n"
 	if buf.String() != want {
 		t.Errorf("styled lines:\n got %q\nwant %q", buf.String(), want)
 	}
@@ -673,7 +749,8 @@ func TestExportDiscardWarningStyledLineByLine(t *testing.T) {
 func TestStreamThemesDecideEachStreamSeparately(t *testing.T) {
 	device, err := os.Open(os.DevNull)
 	if err != nil {
-		t.Skipf("no %s: %v", os.DevNull, err)
+		// Fatal, not Skip: a silently skipped test would hide a regression.
+		t.Fatalf("open %s: %v", os.DevNull, err)
 	}
 	t.Cleanup(func() { _ = device.Close() })
 	file, err := os.Create(filepath.Join(t.TempDir(), "redirected"))

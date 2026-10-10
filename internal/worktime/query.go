@@ -233,10 +233,16 @@ func address(entry Entry) string {
 	return fmt.Sprintf("%s:%d", entry.Host, entry.ID)
 }
 
+// DisplayTimeLayout is the timestamp layout entries are displayed with:
+// FormatTable's WHEN column, and the CLI's verbose entry dumps and status
+// line. It is exported because the CLI's table styling locates each row's
+// WHEN cell by its exact text, so the two must not drift apart.
+const DisplayTimeLayout = "2006-01-02 15:04:05"
+
 // writeTableRow renders one row's tab-separated columns; kept separate from
 // FormatTable so the header/loop/flush shape there stays readable.
 func writeTableRow(tw *tabwriter.Writer, row Row) {
-	when := time.Unix(row.Entry.Epoch, 0).Format("2006-01-02 15:04:05")
+	when := time.Unix(row.Entry.Epoch, 0).Format(DisplayTimeLayout)
 	tags := strings.Join(row.Entry.Tags, ",")
 	_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\n",
 		row.Address, row.Entry.Action, when, row.Entry.Value, tags, row.Entry.Descr)

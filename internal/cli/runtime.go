@@ -84,8 +84,16 @@ func resolveThemes(cmd *cobra.Command, cfg config.Config) (out, errOut ansi.Them
 	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
 		cfgEnabled = false
 	}
-	return streamThemes(cfgEnabled, cfg.Colors.Palette, os.Stdout, os.Stderr, os.Getenv)
+	stdout, stderr := outputStreams()
+	return streamThemes(cfgEnabled, cfg.Colors.Palette, stdout, stderr, os.Getenv)
 }
+
+// outputStreams returns the process streams whose terminal-ness decides
+// whether each is colored. It is a variable only so the package's tests can
+// replace it (see TestMain): they capture output in buffers, and must not
+// have their expectations depend on whether `go test` itself happens to be
+// attached to a terminal.
+var outputStreams = func() (stdout, stderr *os.File) { return os.Stdout, os.Stderr }
 
 // streamThemes resolves one theme per stream from the already-combined
 // config/flag switch. Split from resolveThemes so the per-stream decision
