@@ -71,19 +71,22 @@ func printUndoResult(cmd *cobra.Command, theme ansi.Theme, rec worktime.UndoReco
 // flat read. Wording matches what UndoLast actually did to the entry:
 // undoing an insert removes it, undoing a delete restores it, and undoing a
 // modify reverts it from its post-modify state back to its pre-modify one.
+// The labels are faint so the entries themselves stand out (task m83).
 func printUndoDetail(w io.Writer, theme ansi.Theme, rec worktime.UndoRecord) {
 	switch rec.Op {
 	case worktime.OpInsert:
 		if rec.After != nil {
-			_, _ = fmt.Fprintf(w, "  removed: %s\n", formatEntry(*rec.After, theme))
+			_, _ = fmt.Fprintf(w, "  %s %s\n", theme.Wrap(ansi.RoleDim, "removed:"), formatEntry(*rec.After, theme))
 		}
 	case worktime.OpDelete:
 		if rec.Before != nil {
-			_, _ = fmt.Fprintf(w, "  restored: %s\n", formatEntry(*rec.Before, theme))
+			_, _ = fmt.Fprintf(w, "  %s %s\n", theme.Wrap(ansi.RoleDim, "restored:"), formatEntry(*rec.Before, theme))
 		}
 	case worktime.OpModify:
 		if rec.Before != nil && rec.After != nil {
-			_, _ = fmt.Fprintf(w, "  reverted from: %s\n  back to:       %s\n", formatEntry(*rec.After, theme), formatEntry(*rec.Before, theme))
+			_, _ = fmt.Fprintf(w, "  %s %s\n  %s       %s\n",
+				theme.Wrap(ansi.RoleDim, "reverted from:"), formatEntry(*rec.After, theme),
+				theme.Wrap(ansi.RoleDim, "back to:"), formatEntry(*rec.Before, theme))
 		}
 	}
 }

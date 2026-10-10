@@ -1,5 +1,5 @@
 // Package ansi renders terminal colors for timesamurai's CLI output and
-// resolves whether colors should be enabled at all (task n9).
+// resolves whether colors should be enabled at all (tasks n9 and m83).
 //
 // The design keeps color decisions out of the domain packages: worktime's
 // formatters stay byte-identical (the golden-diff regression guards depend
@@ -44,6 +44,12 @@ const (
 	RoleDim       = "dim"       // quiet hints: faint
 	RolePositive  = "positive"  // positive balances: green
 	RoleNegative  = "negative"  // negative balances: red
+	// Task m83 extends coloring from "the highlights" to all text output,
+	// which needs roles for the bulk of a report/table rather than only its
+	// exceptional parts.
+	RoleKey   = "key"   // field names, report categories, actions, help commands/flags: magenta
+	RoleValue = "value" // durations and other figures: bold
+	RoleTag   = "tag"   // entry tags: yellow
 )
 
 // Roles lists every style role in stable order (for docs and error messages).
@@ -51,10 +57,11 @@ func Roles() []string {
 	return []string{
 		RoleHeader, RoleSeparator, RoleSuccess, RoleWarn, RoleError,
 		RoleAddress, RoleTime, RoleDim, RolePositive, RoleNegative,
+		RoleKey, RoleValue, RoleTag,
 	}
 }
 
-// defaultPalette maps each role to its default SGR style name(s). Values are
+// DefaultPalette maps each role to its default SGR style name(s). Values are
 // space-joined style names parsed by styleCode ("bold cyan").
 func DefaultPalette() map[string]string {
 	return map[string]string{
@@ -68,6 +75,9 @@ func DefaultPalette() map[string]string {
 		RoleDim:       "faint",
 		RolePositive:  "green",
 		RoleNegative:  "red",
+		RoleKey:       "magenta",
+		RoleValue:     "bold",
+		RoleTag:       "yellow",
 	}
 }
 

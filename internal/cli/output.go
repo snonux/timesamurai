@@ -70,16 +70,23 @@ func printEntriesResult(cmd *cobra.Command, theme ansi.Theme, verb string, entri
 
 // formatEntry renders entry's fields for --verbose output. Tags are
 // comma-joined and descr is quoted only when present, so a plain entry
-// doesn't end with a trailing empty descr="". The address and time fields
-// are styled when the theme is enabled (task n9).
+// doesn't end with a trailing empty descr="". With an enabled theme every
+// field value is styled by the same role its `work list` column uses (tasks
+// n9 and m83), and the field names are faint so the values stand out.
 func formatEntry(e worktime.Entry, theme ansi.Theme) string {
 	when := time.Unix(e.Epoch, 0).Format("2006-01-02 15:04:05")
-	tags := strings.Join(e.Tags, ",")
-	address := theme.Wrap(ansi.RoleAddress, fmt.Sprintf("%s:%d", e.Host, e.ID))
-	stamp := theme.Wrap(ansi.RoleTime, when)
-	base := fmt.Sprintf("%s action=%s at=%s value=%d tags=%s", address, e.Action, stamp, e.Value, tags)
+	field := func(name, role, value string) string {
+		return theme.Wrap(ansi.RoleDim, name+"=") + theme.Wrap(role, value)
+	}
+	base := strings.Join([]string{
+		theme.Wrap(ansi.RoleAddress, fmt.Sprintf("%s:%d", e.Host, e.ID)),
+		field("action", ansi.RoleKey, e.Action),
+		field("at", ansi.RoleTime, when),
+		field("value", ansi.RoleValue, fmt.Sprintf("%d", e.Value)),
+		field("tags", ansi.RoleTag, strings.Join(e.Tags, ",")),
+	}, " ")
 	if e.Descr == "" {
 		return base
 	}
-	return fmt.Sprintf("%s descr=%q", base, e.Descr)
+	return base + " " + field("descr", "", fmt.Sprintf("%q", e.Descr))
 }

@@ -34,11 +34,14 @@ Run `timesamurai --help` or `timesamurai work <command> --help` for full flag de
 
 ## Terminal colors
 
-Output is colored on terminals (headers bold, entry addresses cyan, week
-separators faint, positive/negative balances green/red, ...). Roles and
-styles are themable via the `[colors]` section of `config.toml`; everything
-turns off with `report.color = false`, the `--no-color` flag, or a `NO_COLOR`
-environment variable, and colors never leak into pipes or files (see
+All text output is colored on terminals: the report (day labels, category
+keys and values, faint week separators, green/red balances), every `list`
+column, confirmations, warnings, the `Error:` label, and `--help` headings,
+commands and flags. Machine-readable output (`--format json`, `--version`,
+completion scripts) is never colored. Roles and styles are themable via the
+`[colors]` section of `config.toml`; everything turns off with
+`report.color = false`, the `--no-color` flag, or a `NO_COLOR` environment
+variable, and colors never leak into pipes or files (see
 `docs/configuration.md`).
 
 ## Build

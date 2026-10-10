@@ -92,7 +92,7 @@ func parseAndDiffEdit(rows []worktime.Row, edited string) ([]editOp, error) {
 // "<verb> <host>:<id>"/verbose shape every other mutating verb uses.
 func printEditSummary(cmd *cobra.Command, theme ansi.Theme, ops []editOp, applied []worktime.Entry, verbose bool) {
 	if len(ops) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no changes")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), theme.Wrap(ansi.RoleDim, "no changes"))
 		return
 	}
 	for i, entry := range applied {

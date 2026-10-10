@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/worktime/legacy"
 )
 
@@ -49,13 +50,16 @@ func runExport(cmd *cobra.Command, strict bool) error {
 		return err
 	}
 
-	opts := legacy.ExportOptions{Strict: strict, WarnOut: cmd.ErrOrStderr()}
+	// The discard warning is written by the legacy package, which knows
+	// nothing about colors, so it is styled on its way to stderr (task m83).
+	warnOut := newColorizeWriter(cmd.ErrOrStderr(), rt.errTheme, ansi.RoleWarn)
+	opts := legacy.ExportOptions{Strict: strict, WarnOut: warnOut}
 	results, err := legacy.ExportAll(cmdContext(cmd), rt.store, rt.cfg.Storage.DBDir, opts)
 	if err != nil {
 		return err
 	}
 
-	printExportSummary(cmd, results)
+	printExportSummary(cmd, rt.theme, results)
 	return nil
 }
 
@@ -63,14 +67,17 @@ func runExport(cmd *cobra.Command, strict bool) error {
 // entries were written, and -- when ExportHost found stale on-disk entries
 // with no counterpart in the fresh export -- how many were discarded, so
 // stdout always reflects what happened even for a caller not watching
-// stderr.
-func printExportSummary(cmd *cobra.Command, results []legacy.ExportResult) {
+// stderr. The verb is styled like every other confirmation and the discard
+// note as a warning (task m83).
+func printExportSummary(cmd *cobra.Command, theme ansi.Theme, results []legacy.ExportResult) {
 	for _, r := range results {
+		discarded := ""
 		if len(r.Discarded) > 0 {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "export %s: %d entries written, %d discarded (see warning above)\n",
-				r.Host, r.Written, len(r.Discarded))
-			continue
+			discarded = theme.Wrap(ansi.RoleWarn,
+				fmt.Sprintf(", %d discarded (see warning above)", len(r.Discarded)))
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "export %s: %d entries written\n", r.Host, r.Written)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s entries written%s\n",
+			theme.Wrap(ansi.RoleSuccess, "export"), r.Host,
+			theme.Wrap(ansi.RoleValue, fmt.Sprintf("%d", r.Written)), discarded)
 	}
 }

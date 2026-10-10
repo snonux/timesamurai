@@ -55,25 +55,46 @@ Recognised variables (whitespace-only values are ignored):
 Booleans accept `true` / `false` / `yes` / `no` / `1` / `0` / `on` / `off`
 (case-insensitive).
 
-## Terminal colors (task n9)
+## Terminal colors (tasks n9, m83)
 
-All command output can be colored. The master switch is `report.color`
-(`TIMESAMURAI_COLOR` env var, `--no-color` flag to disable per-run).
-Colors are additionally disabled by the standard `NO_COLOR` environment
-variable, and automatically whenever stdout is not a terminal; the standard
-`CLICOLOR_FORCE` variable forces colors on (e.g. through a pipe) without
-overriding an explicit `report.color = false` or `--no-color`. The enable
-decision is made once per run against stdout, so stderr (e.g. report
-warnings) follows stdout's decision — redirecting only stderr to a file on
-an interactive terminal can put escape codes in that file, the same way most
-CLI tools behave.
+All text output is colored: the report (day labels, category keys and
+values, week separators, balances), every `list`/`search` table column,
+mutation confirmations, warnings, the final `Error:` line, and the headings,
+command names and flags in `--help`. Machine-readable output (`--format
+json`, `--version`, completion scripts) is never colored, and with colors
+off every command prints exactly the same text, minus the escape sequences.
 
-The `[colors]` section remaps which style each semantic role uses. Roles:
-`header`, `separator`, `success`, `warn`, `error`, `address`, `time`,
-`dim`, `positive`, `negative`. Style names: the 8 base colors (`black`
-.. `white`), their bright variants (`brightblack`.. `brightwhite`),
-`default`, and the attributes `bold`, `faint`, `italic`, `underline` —
-space-joined combinations like `bold cyan` are allowed:
+The master switch is `report.color` (`TIMESAMURAI_COLOR` env var,
+`--no-color` flag to disable per-run). Colors are additionally disabled by
+the standard `NO_COLOR` environment variable, and automatically whenever the
+output stream is not a terminal; the standard `CLICOLOR_FORCE` variable
+forces colors on (e.g. through a pipe) without overriding an explicit
+`report.color = false` or `--no-color`. The decision is made separately for
+stdout and stderr, so redirecting only one of them to a file keeps that file
+free of escape codes while the other stream stays colored.
+
+The `[colors]` section remaps which style each semantic role uses:
+
+| Role | Default | Used for |
+|---|---|---|
+| `header` | `bold` | table header, `--help` section headings |
+| `separator` | `faint` | report week separator lines |
+| `success` | `green` | confirmation verbs, open session category |
+| `warn` | `yellow` | warnings, dry-run and confirmation prompts, the report's `*` day marker |
+| `error` | `red` | the `Error:` label, failed hosts in the migrate report |
+| `address` | `cyan` | `<host>:<id>` entry addresses, host names |
+| `time` | `blue` | timestamps, report day labels |
+| `dim` | `faint` | quiet hints, field names in `--verbose` output |
+| `positive` | `green` | balances >= 0 |
+| `negative` | `red` | balances < 0 |
+| `key` | `magenta` | report category names, entry actions, `--help` commands and flags |
+| `value` | `bold` | durations and other figures |
+| `tag` | `yellow` | entry tags |
+
+Style names: the 8 base colors (`black` .. `white`), their bright variants
+(`brightblack` .. `brightwhite`), `default`, and the attributes `bold`,
+`faint`, `italic`, `underline` — space-joined combinations like `bold cyan`
+are allowed:
 
 ```toml
 [colors]

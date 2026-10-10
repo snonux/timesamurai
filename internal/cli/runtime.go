@@ -19,15 +19,17 @@ import (
 )
 
 // runtime bundles the config, opened store, resolved hostname, verbose
-// flag, and color theme every work subcommand needs, so each RunE makes one
+// flag, and color themes every work subcommand needs, so each RunE makes one
 // newRuntime(cmd) call instead of repeating config.Load/worktime.Open/
-// hostname-resolution wiring in every verb file.
+// hostname-resolution wiring in every verb file. theme styles stdout,
+// errTheme stderr (see resolveThemes for why they are separate).
 type runtime struct {
-	cfg     config.Config
-	store   *worktime.Store
-	host    string
-	verbose bool
-	theme   ansi.Theme
+	cfg      config.Config
+	store    *worktime.Store
+	host     string
+	verbose  bool
+	theme    ansi.Theme
+	errTheme ansi.Theme
 }
 
 // newRuntime loads configuration (honoring the --db/--store overrides
@@ -60,24 +62,37 @@ func newRuntime(cmd *cobra.Command) (*runtime, error) {
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
-	theme, err := resolveTheme(cmd, cfg)
+	theme, errTheme, err := resolveThemes(cmd, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &runtime{cfg: cfg, store: store, host: host, verbose: verbose, theme: theme}, nil
+	return &runtime{cfg: cfg, store: store, host: host, verbose: verbose, theme: theme, errTheme: errTheme}, nil
 }
 
-// resolveTheme builds the color theme for a run: the master switch is the
-// standard precedence in ansi.ShouldEnable (NO_COLOR > CLICOLOR_FORCE >
-// config's report.color > stdout-is-a-terminal), with --no-color forcing
-// the config switch off, and config's [colors] palette remapping roles.
-func resolveTheme(cmd *cobra.Command, cfg config.Config) (ansi.Theme, error) {
+// resolveThemes builds the color themes for a run, one per output stream:
+// the master switch is the standard precedence in ansi.ShouldEnable
+// (NO_COLOR > CLICOLOR_FORCE > config's report.color > the stream being a
+// terminal), with --no-color forcing the config switch off, and config's
+// [colors] palette remapping roles.
+//
+// stdout and stderr are resolved separately (task m83): now that warnings
+// and errors are styled too, sharing stdout's decision would put escape
+// codes into a file whenever only stderr is redirected from an interactive
+// terminal.
+func resolveThemes(cmd *cobra.Command, cfg config.Config) (out, errOut ansi.Theme, err error) {
 	cfgEnabled := cfg.Report.Color
 	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
 		cfgEnabled = false
 	}
-	enabled := ansi.ShouldEnable(cfgEnabled, os.Stdout, os.Getenv)
-	return ansi.NewTheme(enabled, cfg.Colors.Palette)
+	out, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, os.Stdout, os.Getenv), cfg.Colors.Palette)
+	if err != nil {
+		return ansi.Theme{}, ansi.Theme{}, err
+	}
+	errOut, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, os.Stderr, os.Getenv), cfg.Colors.Palette)
+	if err != nil {
+		return ansi.Theme{}, ansi.Theme{}, err
+	}
+	return out, errOut, nil
 }
 
 // loadConfigWithOverrides loads the sectioned TOML config and then applies

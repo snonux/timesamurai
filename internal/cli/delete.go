@@ -47,7 +47,7 @@ func runDelete(cmd *cobra.Command, addrs []string, dryRun bool) error {
 		return previewDelete(cmd, rt, addrs)
 	}
 	if len(addrs) > 1 {
-		ok, err := confirmDeleteMultiple(cmd, addrs)
+		ok, err := confirmDeleteMultiple(cmd, rt.theme, addrs)
 		if err != nil {
 			return err
 		}
@@ -116,9 +116,18 @@ func lookupEntry(rows []worktime.Row, addr, currentHost string) (worktime.Entry,
 // from cmd.InOrStdin(). Only "y" or "yes" (case-insensitive) confirm;
 // anything else, including EOF (an unattended run with nothing on stdin),
 // is treated as "no" rather than erroring, so a script that forgets to
-// answer safely does nothing instead of accidentally deleting.
-func confirmDeleteMultiple(cmd *cobra.Command, addrs []string) (bool, error) {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "delete %d entries (%s)? [y/N] ", len(addrs), strings.Join(addrs, ", "))
+// answer safely does nothing instead of accidentally deleting. The question
+// is styled as a warning and each address like addresses everywhere else
+// (task m83); the addresses are joined before nothing else touches them, so
+// the plain rendering is unchanged.
+func confirmDeleteMultiple(cmd *cobra.Command, theme ansi.Theme, addrs []string) (bool, error) {
+	styled := make([]string, len(addrs))
+	for i, addr := range addrs {
+		styled[i] = theme.Wrap(ansi.RoleAddress, addr)
+	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s (%s)%s ",
+		theme.Wrap(ansi.RoleWarn, fmt.Sprintf("delete %d entries", len(addrs))),
+		strings.Join(styled, ", "), theme.Wrap(ansi.RoleWarn, "? [y/N]"))
 	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("read confirmation: %w", err)

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/snonux/timesamurai/internal"
+	"github.com/snonux/timesamurai/internal/ansi"
 	"github.com/snonux/timesamurai/internal/cli"
 )
 
@@ -21,8 +22,17 @@ func main() {
 	if handleLegacyVersionFlag(os.Args[1:], os.Stdout) {
 		return
 	}
-	if err := newRoot().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+	root := newRoot()
+	// Help and the final error line are printed outside any work
+	// subcommand's runtime, so they resolve their own best-effort theme
+	// (see internal/cli/ambient.go): stdout's for help, stderr's for errors.
+	ambientTheme := func(file *os.File) ansi.Theme {
+		configPath, _ := root.PersistentFlags().GetString("config")
+		return cli.AmbientTheme(configPath, os.Args[1:], file)
+	}
+	cli.InstallColorHelp(root, func() ansi.Theme { return ambientTheme(os.Stdout) })
+	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, cli.FormatError(ambientTheme(os.Stderr), err))
 		os.Exit(1)
 	}
 }

@@ -52,9 +52,16 @@ func runMigrate(cmd *cobra.Command, force bool) error {
 		return err
 	}
 
+	// Migrate bypasses newRuntime (see newMigrateCmd), so it resolves its
+	// own theme; the report legacy.Migrate writes is styled line by line on
+	// its way to stdout (task m83).
+	theme, _, err := resolveThemes(cmd, cfg)
+	if err != nil {
+		return err
+	}
 	_, err = legacy.Migrate(ctx, cfg.Storage.DBDir, cfg.Storage.StoreDir, legacy.MigrateOptions{
 		Force:  force,
-		Report: cmd.OutOrStdout(),
+		Report: newLineStyleWriter(cmd.OutOrStdout(), theme, migrateLineRole),
 	})
 	if err != nil {
 		if errors.Is(err, legacy.ErrAlreadyMigrated) {

@@ -38,7 +38,7 @@ verbose = false
 # plus bold, faint, italic, underline (space-joined, e.g. "bold red").
 # All colors turn off with report.color = false, the TIMESAMURAI_COLOR env
 # var, the --no-color flag, or a NO_COLOR environment variable; output is
-# also uncolored whenever stdout is not a terminal.
+# also uncolored whenever the output stream is not a terminal.
 # [colors]
 # header    = "bold"
 # separator = "faint"
@@ -50,3 +50,6 @@ verbose = false
 # dim       = "faint"
 # positive  = "green"
 # negative  = "red"
+# key       = "magenta"   # report categories, actions, --help commands/flags
+# value     = "bold"      # durations and other figures
+# tag       = "yellow"

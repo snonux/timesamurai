@@ -66,6 +66,33 @@ func TestNewThemePaletteOverrides(t *testing.T) {
 	}
 }
 
+// TestEveryRoleHasADefaultStyle guards against adding a role constant
+// without a palette entry (task m83 added key/value/tag): such a role would
+// silently render plain, and Roles() would advertise a role that config
+// validation accepts but nothing styles.
+func TestEveryRoleHasADefaultStyle(t *testing.T) {
+	theme, err := NewTheme(true, nil)
+	if err != nil {
+		t.Fatalf("NewTheme: %v", err)
+	}
+	palette := DefaultPalette()
+	if len(palette) != len(Roles()) {
+		t.Errorf("DefaultPalette has %d roles, Roles() lists %d", len(palette), len(Roles()))
+	}
+	for _, role := range Roles() {
+		if got := theme.Wrap(role, "x"); got == "x" {
+			t.Errorf("role %q renders plain with the default palette", role)
+		}
+	}
+	for role, want := range map[string]string{
+		RoleKey: esc + "35m", RoleValue: esc + "1m", RoleTag: esc + "33m",
+	} {
+		if got := theme.Wrap(role, "x"); got != want+"x"+reset {
+			t.Errorf("Wrap(%s) = %q, want %q", role, got, want+"x"+reset)
+		}
+	}
+}
+
 func TestNewThemeRejectsBadPalette(t *testing.T) {
 	if _, err := NewTheme(true, map[string]string{"nope": "red"}); err == nil {
 		t.Error("unknown role accepted")

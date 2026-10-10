@@ -47,9 +47,10 @@ func runReport(cmd *cobra.Command, args []string) error {
 
 	// Task n9: the plain formatter output is styled here, at the CLI layer,
 	// so worktime's byte-exact formatters (and the golden-diff regression
-	// guard) stay untouched. Warnings stream through a colorizing writer.
+	// guard) stay untouched. Warnings stream through a colorizing writer,
+	// styled by stderr's own theme since that is where they go.
 	weeks, err := worktime.BuildReport(entries, rt.cfg.Accounting,
-		newColorizeWriter(cmd.ErrOrStderr(), rt.theme, ansi.RoleWarn))
+		newColorizeWriter(cmd.ErrOrStderr(), rt.errTheme, ansi.RoleWarn))
 	if err != nil {
 		return err
 	}
