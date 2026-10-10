@@ -398,12 +398,75 @@ func TestColorizeTableLeadingSpaceCellsStyled(t *testing.T) {
 	}
 }
 
+// TestColorizeTableRowStopsAtFirstUnlocatableCell pins colorizeTableRow's
+// mismatch handling directly: cells before the first one that is not in
+// place are styled, and nothing after it is -- even a later cell that could
+// be found is not guessed at. It also covers the guard for a cell with more
+// leading blanks than the line has at that position, which must not panic.
+func TestColorizeTableRowStopsAtFirstUnlocatableCell(t *testing.T) {
+	theme := enabledTheme(t)
+	const line = "h:1  add  2023-11-14 22:13:20  5  work  descr"
+	cases := []struct {
+		name  string
+		cells []string
+		want  string
+	}{
+		{"all located", []string{"h:1", "add", "2023-11-14 22:13:20", "5", "work"},
+			"\x1b[36mh:1\x1b[0m  \x1b[35madd\x1b[0m  \x1b[34m2023-11-14 22:13:20\x1b[0m  \x1b[1m5\x1b[0m  \x1b[33mwork\x1b[0m  descr"},
+		{"wrong action: later cells present but not styled", []string{"h:1", "logout", "2023-11-14 22:13:20", "5", "work"},
+			"\x1b[36mh:1\x1b[0m  add  2023-11-14 22:13:20  5  work  descr"},
+		// The cell after the missing one sits exactly where a cell is
+		// expected next; skipping the miss would style "add" as a timestamp.
+		{"missing cell: the next one is not shifted into its place", []string{"h:1", "nope", "add", "5", "work"},
+			"\x1b[36mh:1\x1b[0m  add  2023-11-14 22:13:20  5  work  descr"},
+		{"wrong address: nothing styled", []string{"x:9", "add", "2023-11-14 22:13:20", "5", "work"}, line},
+		{"cell with more leading blanks than the line", []string{"h:1", "   add", "2023-11-14 22:13:20", "5", "work"},
+			"\x1b[36mh:1\x1b[0m  add  2023-11-14 22:13:20  5  work  descr"},
+		{"no cells", nil, line},
+	}
+	for _, tc := range cases {
+		if got := colorizeTableRow(theme, line, tc.cells); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestColorizeTableBlankOnlyCellsSkipped: a blank-only action or tag cell
+// has nothing visible to style and cannot be told from padding, so it gets
+// no escapes at all (they would land on the wrong blanks and show with an
+// underline style), while the cells after it are still located.
+func TestColorizeTableBlankOnlyCellsSkipped(t *testing.T) {
+	rows := []worktime.Row{
+		{Address: "h:1", Entry: worktime.Entry{Host: "h", ID: 1, Action: "  ", Epoch: 1700000000, Value: 5, Tags: []string{"   "}, Descr: "d"}},
+		{Address: "h:2", Entry: worktime.Entry{Host: "h", ID: 2, Action: "add", Epoch: 1700000000, Value: 6, Tags: []string{"work"}}},
+	}
+	plain := worktime.FormatTable(rows)
+	styled := colorizeTable(enabledTheme(t), plain, rows)
+	first := strings.Split(styled, "\n")[1]
+
+	if strings.Contains(first, "\x1b[35m") || strings.Contains(first, "\x1b[33m") {
+		t.Errorf("blank-only cell was wrapped: %q", first)
+	}
+	if !strings.HasPrefix(first, "\x1b[36mh:1\x1b[0m ") || !strings.Contains(first, " \x1b[34m") || !strings.Contains(first, "\x1b[1m5\x1b[0m") {
+		t.Errorf("cells around the blank ones not styled: %q", first)
+	}
+	if !strings.Contains(styled, "\x1b[35madd\x1b[0m") || !strings.Contains(styled, "\x1b[33mwork\x1b[0m") {
+		t.Errorf("next row lost styling: %q", styled)
+	}
+	if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
+		t.Errorf("visible text differs:\n got %q\nwant %q", got, plain)
+	}
+}
+
 // TestTableRowLines pins the line count that maps rows to rendered lines.
 func TestTableRowLines(t *testing.T) {
 	cases := map[int]worktime.Row{
 		1: {Address: "h:1", Entry: worktime.Entry{Action: "add", Descr: "plain \t\v\r text", Tags: []string{"a", "b"}}},
 		2: {Address: "h:1", Entry: worktime.Entry{Descr: "one\ntwo"}},
 		4: {Address: "h:1", Entry: worktime.Entry{Action: "a\fb", Descr: "x\n", Tags: []string{"t\n", "u"}}},
+		// A host can hold a line break too (a hand-written store; the CLI
+		// rejects "\n" in --host but not "\f").
+		3: {Address: "h\fx\ny:1", Entry: worktime.Entry{Host: "h\fx\ny", ID: 1, Action: "add"}},
 	}
 	for want, row := range cases {
 		if got := tableRowLines(row); got != want {

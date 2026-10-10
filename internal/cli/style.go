@@ -271,11 +271,16 @@ func tableRowCells(row worktime.Row) []string {
 // after the last located cell (the descr) stay outside the escapes. At the
 // first cell that is not where it should be (the rendering and rows
 // disagree) it stops and leaves the rest of the line plain -- nothing is
-// guessed, and only this one row is affected.
+// guessed, and only this one row is affected. An empty or blank-only cell
+// is skipped: it is indistinguishable from the padding around it, and
+// there is nothing visible in it to style.
 func colorizeTableRow(theme ansi.Theme, line string, cells []string) string {
 	var out strings.Builder
 	rest := line
 	for i, cell := range cells {
+		if strings.TrimLeft(cell, " ") == "" {
+			continue
+		}
 		padding := 0
 		if i > 0 {
 			// Everything blank before the cell is padding, except the
