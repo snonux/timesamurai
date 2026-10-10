@@ -65,13 +65,22 @@ json`, `--version`, completion scripts) is never colored, and with colors
 off every command prints exactly the same text, minus the escape sequences.
 
 The master switch is `report.color` (`TIMESAMURAI_COLOR` env var,
-`--no-color` flag to disable per-run). Colors are additionally disabled by
+`--no-color` flag to disable per-run; the flag is accepted at every level,
+e.g. `timesamurai --no-color --help`). Colors are additionally disabled by
 the standard `NO_COLOR` environment variable, and automatically whenever the
 output stream is not a terminal; the standard `CLICOLOR_FORCE` variable
 forces colors on (e.g. through a pipe) without overriding an explicit
 `report.color = false` or `--no-color`. The decision is made separately for
 stdout and stderr, so redirecting only one of them to a file keeps that file
 free of escape codes while the other stream stays colored.
+
+Two surfaces are styled outside a command's normal run: `--help` and the
+final `Error:` line. They read the config strictly read-only (no legacy
+`config.json` migration) and fall back to the default palette when the
+config cannot be loaded, so a broken `config.toml` still produces a readable
+error. cobra's own `Unknown help topic` message and the legacy-config notice
+(printed before the config, and therefore the color settings, are known)
+stay plain.
 
 The `[colors]` section remaps which style each semantic role uses:
 

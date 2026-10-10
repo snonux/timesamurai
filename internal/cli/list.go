@@ -226,7 +226,7 @@ func parseValueBound(flag, value string) (int64, error) {
 func printRows(cmd *cobra.Command, theme ansi.Theme, rows []worktime.Row, format string) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "", "table":
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), colorizeTable(theme, worktime.FormatTable(rows)))
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), colorizeTable(theme, worktime.FormatTable(rows), rows))
 		return nil
 	case "json":
 		out, err := worktime.FormatJSON(rows)

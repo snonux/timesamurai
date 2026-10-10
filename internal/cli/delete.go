@@ -72,7 +72,7 @@ func previewDelete(cmd *cobra.Command, rt *runtime, addrs []string) error {
 			return err
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n",
-			rt.theme.Wrap(ansi.RoleWarn, "would delete"), canonical, formatEntry(entry, rt.theme))
+			rt.theme.Wrap(ansi.RoleWarn, "would delete"), rt.theme.Wrap(ansi.RoleAddress, canonical), formatEntry(entry, rt.theme))
 	}
 	return nil
 }

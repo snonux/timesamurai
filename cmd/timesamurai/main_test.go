@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -172,4 +176,149 @@ func TestVersionFlagDoesNotClaimShorthandV(t *testing.T) {
 	if sh := root.Flags().ShorthandLookup("v"); sh != nil {
 		t.Errorf("-v is bound to %q on root; it must stay free for --verbose", sh.Name)
 	}
+}
+
+// hermeticColorEnv points config at an empty directory and neutralizes the
+// ambient color variables, so the color tests below see only what they set.
+func hermeticColorEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("TIMESAMURAI_COLOR", "")
+}
+
+// runRoot executes a fresh root with args and returns its combined output.
+func runRoot(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	root := newRoot()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), err
+}
+
+// TestRootHelpColoredWhenForcedAndOffSwitchesWork covers newRoot's help
+// wiring (task m83): forced colors style the help at every level, the
+// visible text is unchanged, and NO_COLOR / report.color=false turn it off.
+func TestRootHelpColoredWhenForcedAndOffSwitchesWork(t *testing.T) {
+	hermeticColorEnv(t)
+	for _, args := range [][]string{{"--help"}, {"completion", "--help"}, {"work", "list", "--help"}} {
+		plain, err := runRoot(t, args...)
+		if err != nil || strings.ContainsRune(plain, '\x1b') {
+			t.Fatalf("%v plain: err=%v out=%q", args, err, plain)
+		}
+		t.Setenv("CLICOLOR_FORCE", "1")
+		styled, err := runRoot(t, args...)
+		if err != nil || !strings.Contains(styled, "\x1b[1mUsage:\x1b[0m") {
+			t.Errorf("%v forced: err=%v, help not styled: %q", args, err, styled)
+		}
+		if got := stripEscapes(styled); got != plain {
+			t.Errorf("%v: visible help differs:\n got %q\nwant %q", args, got, plain)
+		}
+		t.Setenv("NO_COLOR", "1")
+		if out, _ := runRoot(t, args...); out != plain {
+			t.Errorf("%v: NO_COLOR help differs from plain: %q", args, out)
+		}
+		t.Setenv("NO_COLOR", "")
+		t.Setenv("TIMESAMURAI_COLOR", "false")
+		if out, _ := runRoot(t, args...); out != plain {
+			t.Errorf("%v: report.color=false help differs from plain: %q", args, out)
+		}
+		t.Setenv("TIMESAMURAI_COLOR", "")
+		t.Setenv("CLICOLOR_FORCE", "")
+	}
+}
+
+// TestNoColorFlagAcceptedAtEveryLevel: --no-color must parse on the root
+// and on non-work commands too, since their help is colored as well (it
+// used to exist only under `work`, making `timesamurai --help --no-color`
+// an unknown-flag error).
+func TestNoColorFlagAcceptedAtEveryLevel(t *testing.T) {
+	hermeticColorEnv(t)
+	for _, args := range [][]string{
+		{"--no-color", "--help"},
+		{"--help", "--no-color"},
+		{"completion", "--no-color", "--help"},
+		{"work", "--no-color", "list", "--help"},
+		{"--no-color"},
+	} {
+		if out, err := runRoot(t, args...); err != nil || !strings.Contains(out, "Usage:") {
+			t.Errorf("%v: err=%v out=%q", args, err, out)
+		}
+	}
+	// Negative: a misspelled variant is still rejected.
+	if _, err := runRoot(t, "--no-colour", "--help"); err == nil {
+		t.Error("--no-colour was accepted")
+	}
+}
+
+// TestMachineReadableOutputNeverColored: version, completion scripts and
+// the shell-completion protocol must stay escape-free with colors forced.
+func TestMachineReadableOutputNeverColored(t *testing.T) {
+	hermeticColorEnv(t)
+	t.Setenv("CLICOLOR_FORCE", "1")
+	for _, args := range [][]string{
+		{"--version"},
+		{"completion", "fish"},
+		{"completion", "bash"},
+		{"__complete", "work", ""},
+		{"__completeNoDesc", "work", "re"},
+	} {
+		out, err := runRoot(t, args...)
+		if err != nil {
+			t.Errorf("%v: %v", args, err)
+		}
+		if out == "" || strings.ContainsRune(out, '\x1b') {
+			t.Errorf("%v: output empty or colored: %q", args, out)
+		}
+	}
+}
+
+// TestReportError covers the final error line: plain by default (the file
+// is not a terminal), red label when forced, and plain again with
+// --no-color in the raw args even though parsing failed before reaching it.
+func TestReportError(t *testing.T) {
+	hermeticColorEnv(t)
+	report := func(args ...string) string {
+		t.Helper()
+		file, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = file.Close() }()
+		root := newRoot()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		runErr := root.Execute()
+		if runErr == nil {
+			t.Fatalf("%v: expected an error", args)
+		}
+		reportError(file, root, args, runErr)
+		written, err := os.ReadFile(file.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(written)
+	}
+	const message = `unknown command "bogus" for "timesamurai work"` + "\n"
+
+	if got := report("work", "bogus"); got != "Error: "+message {
+		t.Errorf("plain error = %q", got)
+	}
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if got := report("work", "bogus"); got != "\x1b[31mError:\x1b[0m "+message {
+		t.Errorf("forced error = %q", got)
+	}
+	if got := report("work", "--nosuchflag", "--no-color"); !strings.HasPrefix(got, "Error: unknown flag") {
+		t.Errorf("--no-color after a flag error still colored: %q", got)
+	}
+}
+
+// stripEscapes removes SGR escape sequences.
+func stripEscapes(s string) string {
+	return regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(s, "")
 }

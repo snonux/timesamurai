@@ -28,6 +28,9 @@ func TestHasNoColorFlag(t *testing.T) {
 		{"after terminator is a positional", []string{"work", "--", "--no-color"}, false},
 		{"similar flag is not it", []string{"--no-colors", "--no-colour"}, false},
 		{"flag value lookalike", []string{"-d", "no-color"}, false},
+		// Documented imprecision: a raw scan cannot tell a flag from another
+		// flag's value, and deliberately errs toward plain output.
+		{"flag value that is literally the flag", []string{"-d", "--no-color"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,60 +146,176 @@ func TestColorizeHelpOnRealHelp(t *testing.T) {
 	}
 }
 
-// TestColorizeHelpLeavesProseAlone: usage lines, descriptions and sentences
-// that merely contain a colon or a flag name must stay plain.
+// TestColorizeHelpLeavesProseAlone: only rows inside a Commands or Flags
+// section are styled. Usage lines, descriptions, and row-shaped lines in a
+// Long description or an Examples block must stay plain.
 func TestColorizeHelpLeavesProseAlone(t *testing.T) {
 	theme := enabledTheme(t)
-	for _, line := range []string{
-		"Track and adjust worked time",
-		"  timesamurai work [command]",
-		`Use "timesamurai work [command] --help" for more information about a command.`,
-		"Note: see --no-color",
+	help := strings.Join([]string{
+		"Long description mentioning",
+		"  indented   word that looks like a command row",
+		"  --looks-like a flag row",
 		"lowercase heading:",
 		"",
-	} {
-		if got := colorizeHelpLine(theme, line); got != line {
-			t.Errorf("colorizeHelpLine(%q) = %q, want unchanged", line, got)
+		"Usage:",
+		"  timesamurai work [command]",
+		"",
+		"Examples:",
+		"  report   this-week",
+		"  --at yesterday",
+		"",
+		"Flags:",
+		"      --real string   a flag",
+		"",
+		`Use "timesamurai work [command] --help" for more information about a command.`,
+		"  trailing   row after prose ended the section",
+		"",
+	}, "\n")
+	want := strings.Join([]string{
+		"Long description mentioning",
+		"  indented   word that looks like a command row",
+		"  --looks-like a flag row",
+		"lowercase heading:",
+		"",
+		"\x1b[1mUsage:\x1b[0m",
+		"  timesamurai work [command]",
+		"",
+		"\x1b[1mExamples:\x1b[0m",
+		"  report   this-week",
+		"  --at yesterday",
+		"",
+		"\x1b[1mFlags:\x1b[0m",
+		"      \x1b[35m--real\x1b[0m string   a flag",
+		"",
+		`Use "timesamurai work [command] --help" for more information about a command.`,
+		"  trailing   row after prose ended the section",
+		"",
+	}, "\n")
+	if got := ColorizeHelp(theme, help); got != want {
+		t.Errorf("ColorizeHelp:\n got %q\nwant %q", got, want)
+	}
+}
+
+// helpTree returns a fresh root with the work tree attached, like main's.
+func helpTree() *cobra.Command {
+	root := &cobra.Command{Use: "timesamurai", Short: "Worktime tracking tool"}
+	root.AddCommand(NewWorkCmd())
+	return root
+}
+
+// runHelp executes args against root and returns what it printed.
+func runHelp(t *testing.T, root *cobra.Command, args ...string) string {
+	t.Helper()
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("%v: %v", args, err)
+	}
+	return out.String()
+}
+
+// TestPlainHelpMatchesCobra pins plainHelp (our rebuild of cobra's default
+// help layout) against cobra's own default help func for every command in
+// the tree, so a cobra upgrade that changes the layout fails here.
+func TestPlainHelpMatchesCobra(t *testing.T) {
+	newScratchStore(t)
+	paths := [][]string{{}, {"work"}}
+	for _, sub := range NewWorkCmd().Commands() {
+		paths = append(paths, []string{"work", sub.Name()})
+	}
+	for _, path := range paths {
+		args := append(path, "--help")
+		want := runHelp(t, helpTree(), args...)
+
+		ours := helpTree()
+		InstallColorHelp(ours, func() ansi.Theme { return ansi.Theme{} })
+		if got := runHelp(t, ours, args...); got != want {
+			t.Errorf("%v: help differs from cobra's default:\n got %q\nwant %q", args, got, want)
 		}
 	}
 }
 
 // TestInstallColorHelpStylesSubcommandHelp checks the wiring: installed on a
 // root, the help func is inherited by subcommands, writes the styled text to
-// the command's own output, and resolves the theme only when help runs.
+// the command's own output, resolves the theme only when help runs, and
+// does not pin the subcommand's output writer (a later SetOut on the root
+// must still reach it).
 func TestInstallColorHelpStylesSubcommandHelp(t *testing.T) {
 	newScratchStore(t)
-	run := func(theme ansi.Theme) (string, int) {
-		root := &cobra.Command{Use: "timesamurai"}
-		root.AddCommand(NewWorkCmd())
-		resolved := 0
-		InstallColorHelp(root, func() ansi.Theme { resolved++; return theme })
-		var out strings.Builder
-		root.SetOut(&out)
-		root.SetErr(&out)
-		root.SetArgs([]string{"work", "report", "--help"})
-		if resolved != 0 {
-			t.Fatalf("theme resolved before help ran")
-		}
-		if err := root.Execute(); err != nil {
-			t.Fatalf("help: %v", err)
-		}
-		return out.String(), resolved
+	root := helpTree()
+	resolved := 0
+	InstallColorHelp(root, func() ansi.Theme { resolved++; return enabledTheme(t) })
+	if resolved != 0 {
+		t.Fatalf("theme resolved before help ran")
 	}
 
-	plain, _ := run(disabledTheme(t))
-	if strings.ContainsRune(plain, '\x1b') || !strings.Contains(plain, "Usage:") {
-		t.Fatalf("plain help wrong: %q", plain)
-	}
-	styled, resolved := run(enabledTheme(t))
+	styled := runHelp(t, root, "work", "report", "--help")
 	if resolved != 1 {
 		t.Errorf("theme resolved %d times, want 1", resolved)
 	}
-	if !strings.Contains(styled, "\x1b[1mUsage:\x1b[0m") {
+	if !strings.Contains(styled, "\x1b[1mUsage:\x1b[0m") || !strings.Contains(styled, "\x1b[35m--no-color\x1b[0m") {
 		t.Errorf("subcommand help not styled: %q", styled)
 	}
+	plain := runHelp(t, helpTree(), "work", "report", "--help")
 	if got := stripSGR.ReplaceAllString(styled, ""); got != plain {
 		t.Errorf("visible help differs:\n got %q\nwant %q", got, plain)
+	}
+
+	// Second run on the same tree, into a new writer set on the root.
+	if again := runHelp(t, root, "work", "report", "--help"); again != styled {
+		t.Errorf("second help run did not reach the root's new writer: %q", again)
+	}
+}
+
+// TestAmbientThemeNeverWritesConfig is the regression test for a review
+// finding: with only a legacy config.json present, a normal config load
+// migrates it to config.toml. Printing help or an error must not.
+func TestAmbientThemeNeverWritesConfig(t *testing.T) {
+	newScratchStore(t)
+	dir := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "timesamurai")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "config.json"), `{"weekworkhours": 40}`)
+
+	AmbientTheme("", []string{"--help"}, nil)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "config.json" {
+		t.Errorf("ambient theme changed the config directory: %v", entries)
+	}
+}
+
+// TestAmbientThemeFindsConfigInRawArgs: when cobra never parsed --config
+// (a flag error came first), the raw args still select the config file, in
+// both spellings, and not past a "--" terminator.
+func TestAmbientThemeFindsConfigInRawArgs(t *testing.T) {
+	newScratchStore(t)
+	t.Setenv("CLICOLOR_FORCE", "1")
+	off := filepath.Join(t.TempDir(), "off.toml")
+	writeFile(t, off, "[report]\ncolor = false\n")
+
+	for name, args := range map[string][]string{
+		"separate value": {"work", "--bogus", "--config", off},
+		"equals value":   {"work", "--bogus", "--config=" + off},
+	} {
+		if AmbientTheme("", args, nil).Enabled() {
+			t.Errorf("%s: --config in raw args was ignored", name)
+		}
+	}
+	for name, args := range map[string][]string{
+		"after terminator": {"work", "--", "--config", off},
+		"missing value":    {"work", "--config"},
+		"absent":           {"work", "report"},
+	} {
+		if !AmbientTheme("", args, nil).Enabled() {
+			t.Errorf("%s: theme should use the default config", name)
+		}
 	}
 }
 

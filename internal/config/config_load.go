@@ -19,7 +19,8 @@ import (
 // A missing config file is not an error; defaults are used.
 // When a legacy config.json is present without config.toml, Load migrates it
 // once to TOML (JSON is left in place). When both exist, TOML wins and a
-// one-line notice is written.
+// one-line notice is written. LoadOptions.SkipLegacyMigration turns both of
+// those off, making Load read-only.
 func Load(ctx context.Context, opts LoadOptions) (Config, error) {
 	cfg := Default()
 	if ctx != nil {
@@ -33,8 +34,10 @@ func Load(ctx context.Context, opts LoadOptions) (Config, error) {
 		return cfg, err
 	}
 
-	if err := maybeMigrateLegacyJSON(ctx, path, noticeWriter(opts)); err != nil {
-		return cfg, err
+	if !opts.SkipLegacyMigration {
+		if err := maybeMigrateLegacyJSON(ctx, path, noticeWriter(opts)); err != nil {
+			return cfg, err
+		}
 	}
 
 	fileOverlay, err := loadOverlayFromFile(path)

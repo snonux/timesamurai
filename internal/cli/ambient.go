@@ -6,12 +6,12 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -25,12 +25,18 @@ import (
 // uses: NO_COLOR, --no-color, report.color, CLICOLOR_FORCE, whether file is
 // a terminal, and the [colors] palette.
 //
-// It never fails. args is scanned for --no-color rather than read from a
-// parsed flag set because the error being reported may be a flag-parsing
-// error; and a config that does not load (possibly the very error being
-// reported) falls back to the built-in defaults, so a broken config.toml
-// still gets a readable, default-styled error.
+// It never fails and never writes anything. args is scanned for --no-color
+// and --config rather than relying on a parsed flag set, because the error
+// being reported may be a flag-parsing error (which leaves later flags
+// unparsed) and cobra stops parsing at --help; configPath, the parsed
+// --config value, wins when cobra did get that far. A config that does not
+// load (possibly the very error being reported) falls back to the built-in
+// defaults, so a broken config.toml still gets a readable, default-styled
+// error.
 func AmbientTheme(configPath string, args []string, file *os.File) ansi.Theme {
+	if configPath == "" {
+		configPath = configPathFromArgs(args)
+	}
 	cfg := loadAmbientConfig(configPath)
 	enabled := cfg.Report.Color && !hasNoColorFlag(args)
 	theme, err := ansi.NewTheme(ansi.ShouldEnable(enabled, file, os.Getenv), cfg.Colors.Palette)
@@ -43,8 +49,10 @@ func AmbientTheme(configPath string, args []string, file *os.File) ansi.Theme {
 }
 
 // loadAmbientConfig loads the config for AmbientTheme, returning the
-// built-in defaults when it cannot be loaded. The legacy-config notice is
-// discarded: the command's own load already printed it (or will).
+// built-in defaults when it cannot be loaded. The load is strictly
+// read-only (SkipLegacyMigration): printing help or an error must not
+// create config.toml from a legacy config.json as a side effect, nor repeat
+// the legacy notice the command's own load already printed.
 func loadAmbientConfig(configPath string) config.Config {
 	if configPath != "" {
 		expanded, err := pathutil.ExpandHome(configPath)
@@ -54,8 +62,9 @@ func loadAmbientConfig(configPath string) config.Config {
 		configPath = expanded
 	}
 	cfg, err := config.Load(context.Background(), config.LoadOptions{
-		ConfigPath:   configPath,
-		NoticeWriter: io.Discard,
+		ConfigPath:          configPath,
+		NoticeWriter:        io.Discard,
+		SkipLegacyMigration: true,
 	})
 	if err != nil {
 		return config.Default()
@@ -63,10 +72,33 @@ func loadAmbientConfig(configPath string) config.Config {
 	return cfg
 }
 
+// configPathFromArgs returns the --config value from raw args ("--config
+// <path>" or "--config=<path>", before a "--" terminator), or "" when there
+// is none.
+func configPathFromArgs(args []string) string {
+	for i, arg := range args {
+		if arg == "--" {
+			return ""
+		}
+		if arg == "--config" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if value, ok := strings.CutPrefix(arg, "--config="); ok {
+			return value
+		}
+	}
+	return ""
+}
+
 // hasNoColorFlag reports whether args carries --no-color (or
 // --no-color=<true-ish>) before a "--" terminator. Mirrors pflag's bool
 // parsing closely enough for a best-effort scan: an unparsable value counts
 // as set, since the user plainly asked for no colors.
+//
+// Known and accepted imprecision: a raw scan cannot tell a flag from
+// another flag's value, so `-d --no-color` (a description that is literally
+// "--no-color") also counts. The scan errs toward plain output -- the worst
+// case is an uncolored help or error line, never a stray escape sequence.
 func hasNoColorFlag(args []string) bool {
 	for _, arg := range args {
 		if arg == "--" {
@@ -95,22 +127,35 @@ func FormatError(theme ansi.Theme, err error) string {
 
 // InstallColorHelp makes root (and, through cobra's inheritance, every
 // subcommand) render its help text through ColorizeHelp. theme is a function
-// so the theme is resolved only when help is actually printed, after cobra
-// has parsed --config.
+// so the theme is resolved only when help is actually printed.
 func InstallColorHelp(root *cobra.Command, theme func() ansi.Theme) {
-	plainHelp := root.HelpFunc()
-	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		// Cobra's help func writes straight to cmd's output, so it is
-		// pointed at a buffer for the duration of the call. Restoring with
-		// the resolved writer (rather than "unset") is equivalent here:
-		// help is the last thing a run prints.
-		out := cmd.OutOrStdout()
-		var plain bytes.Buffer
-		cmd.SetOut(&plain)
-		plainHelp(cmd, args)
-		cmd.SetOut(out)
-		_, _ = io.WriteString(out, ColorizeHelp(theme(), plain.String()))
+	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		_, _ = io.WriteString(cmd.OutOrStdout(), ColorizeHelp(theme(), plainHelp(cmd)))
 	})
+}
+
+// plainHelp renders cmd's help text exactly as cobra's default help func
+// does (cobra's defaultHelpFunc: the long or short description, a blank
+// line, then the usage block). It is rebuilt here rather than captured from
+// the default help func because that one only writes to cmd's own output:
+// capturing it would mean swapping cmd's writer, and cobra offers no way to
+// swap it back to "inherit from parent". UsageString is cobra's own
+// buffer-returning API and does restore the writer. TestPlainHelpMatchesCobra
+// pins the equivalence for every command, so a cobra upgrade that changes
+// the default layout fails loudly instead of drifting.
+func plainHelp(cmd *cobra.Command) string {
+	var out strings.Builder
+	description := cmd.Long
+	if description == "" {
+		description = cmd.Short
+	}
+	if description = strings.TrimRightFunc(description, unicode.IsSpace); description != "" {
+		out.WriteString(description + "\n\n")
+	}
+	if cmd.Runnable() || cmd.HasSubCommands() {
+		out.WriteString(cmd.UsageString())
+	}
+	return out.String()
 }
 
 // helpHeadingRe matches cobra's section headings ("Usage:", "Available
@@ -118,40 +163,52 @@ func InstallColorHelp(root *cobra.Command, theme func() ansi.Theme) {
 // an unindented line, ending in a colon.
 var helpHeadingRe = regexp.MustCompile(`^[A-Z][A-Za-z ]*:$`)
 
-// helpCommandRe matches an "Available Commands" row: two-space indent, the
-// command name, then at least two spaces of padding before its description.
-var helpCommandRe = regexp.MustCompile(`^(  )([a-z][a-z-]*)(\s{2,}\S.*)$`)
+// helpCommandRe matches a command row: two-space indent, the command name,
+// then at least two spaces of padding before its description.
+var helpCommandRe = regexp.MustCompile(`^(  )([a-z][\w-]*)(\s{2,}\S.*)$`)
 
 // helpFlagRe matches a flag row's leading flag spec: indent, optional
 // "-x, " shorthand, and the long "--name".
 var helpFlagRe = regexp.MustCompile(`^(\s+)((?:-\w, )?--[\w-]+)(.*)$`)
 
 // ColorizeHelp styles cobra's help/usage text: section headings in the
-// header role, command names and flags in the key role. Everything else
-// (descriptions, usage lines) stays plain, and a disabled theme returns help
-// unchanged.
+// header role, and command names and flags in the key role -- but only
+// inside the sections that list them ("... Commands:" and "... Flags:"), so
+// a Long description or Examples block that happens to contain an indented
+// word or a "--flag" is never mistaken for a row. Everything else stays
+// plain, and a disabled theme returns help unchanged.
 func ColorizeHelp(theme ansi.Theme, help string) string {
 	if !theme.Enabled() {
 		return help
 	}
 	lines := strings.Split(help, "\n")
+	var row *regexp.Regexp // row shape of the section being read, if any
 	for i, line := range lines {
-		lines[i] = colorizeHelpLine(theme, line)
+		switch {
+		case helpHeadingRe.MatchString(line):
+			row = helpSectionRow(line)
+			lines[i] = theme.Wrap(ansi.RoleHeader, line)
+		case !strings.HasPrefix(line, " ") && line != "":
+			// Unindented prose ends the section.
+			row = nil
+		case row != nil:
+			if m := row.FindStringSubmatch(line); m != nil {
+				lines[i] = m[1] + theme.Wrap(ansi.RoleKey, m[2]) + m[3]
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }
 
-// colorizeHelpLine styles one help line by which of the three shapes it
-// has; a line matching none is returned unchanged.
-func colorizeHelpLine(theme ansi.Theme, line string) string {
-	if helpHeadingRe.MatchString(line) {
-		return theme.Wrap(ansi.RoleHeader, line)
+// helpSectionRow returns the row regex for the rows under heading, or nil
+// for a section whose lines are not styled (Usage, Aliases, Examples).
+func helpSectionRow(heading string) *regexp.Regexp {
+	switch {
+	case strings.HasSuffix(heading, "Commands:"):
+		return helpCommandRe
+	case strings.HasSuffix(heading, "Flags:"):
+		return helpFlagRe
+	default:
+		return nil
 	}
-	if m := helpFlagRe.FindStringSubmatch(line); m != nil {
-		return m[1] + theme.Wrap(ansi.RoleKey, m[2]) + m[3]
-	}
-	if m := helpCommandRe.FindStringSubmatch(line); m != nil {
-		return m[1] + theme.Wrap(ansi.RoleKey, m[2]) + m[3]
-	}
-	return line
 }

@@ -59,6 +59,12 @@ type LoadOptions struct {
 	// NoticeWriter receives one-line notices (e.g. legacy JSON ignored).
 	// When nil, notices go to os.Stderr.
 	NoticeWriter io.Writer
+	// SkipLegacyMigration makes Load strictly read-only: it neither writes
+	// config.toml from a legacy config.json nor prints the "JSON ignored"
+	// notice. For callers that only peek at the config on a path that must
+	// have no side effects (the CLI's --help and error styling); a legacy
+	// config.json with no config.toml then simply yields the defaults.
+	SkipLegacyMigration bool
 }
 
 // fileConfig is the TOML decode target. Section tables only; flat keys are rejected.

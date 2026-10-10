@@ -23,18 +23,25 @@ func main() {
 		return
 	}
 	root := newRoot()
-	// Help and the final error line are printed outside any work
-	// subcommand's runtime, so they resolve their own best-effort theme
-	// (see internal/cli/ambient.go): stdout's for help, stderr's for errors.
-	ambientTheme := func(file *os.File) ansi.Theme {
-		configPath, _ := root.PersistentFlags().GetString("config")
-		return cli.AmbientTheme(configPath, os.Args[1:], file)
-	}
-	cli.InstallColorHelp(root, func() ansi.Theme { return ambientTheme(os.Stdout) })
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, cli.FormatError(ambientTheme(os.Stderr), err))
+		reportError(os.Stderr, root, os.Args[1:], err)
 		os.Exit(1)
 	}
+}
+
+// reportError prints the final "Error: ..." line to stderr, its label
+// styled by the ambient theme resolved against stderr (see
+// internal/cli/ambient.go for why errors cannot use a command's own theme).
+func reportError(stderr *os.File, root *cobra.Command, args []string, err error) {
+	theme := cli.AmbientTheme(parsedConfigPath(root), args, stderr)
+	_, _ = fmt.Fprintln(stderr, cli.FormatError(theme, err))
+}
+
+// parsedConfigPath returns --config as cobra parsed it, or "" when it was
+// not given or parsing never got that far.
+func parsedConfigPath(root *cobra.Command) string {
+	configPath, _ := root.PersistentFlags().GetString("config")
+	return configPath
 }
 
 // handleLegacyVersionFlag prints the version and reports true when args is
@@ -76,6 +83,19 @@ func newRoot() *cobra.Command {
 	// finally reaches it, matching the precedence documented in
 	// docs/configuration.md (flags beat TIMESAMURAI_* beat the file).
 	root.PersistentFlags().String("config", "", "path to config.toml (default: $XDG_CONFIG_HOME/timesamurai/config.toml)")
+
+	// --no-color is registered here as well as on `work` (which keeps its
+	// own so the work tree stays usable standalone, as the cli tests build
+	// it): now that --help is colored at every level, the off switch has to
+	// be accepted at every level too, including `timesamurai --help` and
+	// `timesamurai completion --help`.
+	root.PersistentFlags().Bool("no-color", false, "disable all terminal colors (also honors NO_COLOR and report.color=false)")
+
+	// Help is printed outside any work subcommand's runtime, so it resolves
+	// its own best-effort theme against stdout (internal/cli/ambient.go).
+	cli.InstallColorHelp(root, func() ansi.Theme {
+		return cli.AmbientTheme(parsedConfigPath(root), os.Args[1:], os.Stdout)
+	})
 
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newCompletionCmd())

@@ -369,3 +369,49 @@ func TestBuildMigrateDoc_Table(t *testing.T) {
 type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
+
+// TestLoad_SkipLegacyMigrationIsReadOnly: with SkipLegacyMigration a legacy
+// config.json is neither migrated (no config.toml appears, defaults are
+// returned) nor announced, while the same load without the option does
+// migrate -- so the option, not the fixture, is what kept it read-only.
+func TestLoad_SkipLegacyMigrationIsReadOnly(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	dir := t.TempDir()
+	tomlPath := filepath.Join(dir, "config.toml")
+	jsonPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(jsonPath, []byte(`{"worktime_db_dir":"/tmp/legacy-db"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var notice bytes.Buffer
+	opts := LoadOptions{ConfigPath: tomlPath, IgnoreEnv: true, NoticeWriter: &notice, SkipLegacyMigration: true}
+	cfg, err := Load(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tomlPath); !os.IsNotExist(err) {
+		t.Fatalf("SkipLegacyMigration still wrote config.toml (stat err: %v)", err)
+	}
+	if cfg.Storage.DBDir == "/tmp/legacy-db" {
+		t.Error("SkipLegacyMigration still read the legacy json")
+	}
+	if notice.Len() != 0 {
+		t.Errorf("SkipLegacyMigration printed a notice: %q", notice.String())
+	}
+
+	opts.SkipLegacyMigration = false
+	if _, err := Load(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tomlPath); err != nil {
+		t.Fatalf("control load did not migrate: %v", err)
+	}
+	// Both files now exist: skipping also suppresses the "ignored" notice.
+	opts.SkipLegacyMigration = true
+	if _, err := Load(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if notice.Len() != 0 {
+		t.Errorf("SkipLegacyMigration printed the ignored-json notice: %q", notice.String())
+	}
+}

@@ -84,11 +84,18 @@ func resolveThemes(cmd *cobra.Command, cfg config.Config) (out, errOut ansi.Them
 	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
 		cfgEnabled = false
 	}
-	out, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, os.Stdout, os.Getenv), cfg.Colors.Palette)
+	return streamThemes(cfgEnabled, cfg.Colors.Palette, os.Stdout, os.Stderr, os.Getenv)
+}
+
+// streamThemes resolves one theme per stream from the already-combined
+// config/flag switch. Split from resolveThemes so the per-stream decision
+// can be tested with injected files and environment.
+func streamThemes(cfgEnabled bool, palette map[string]string, stdout, stderr *os.File, getenv func(string) string) (out, errOut ansi.Theme, err error) {
+	out, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, stdout, getenv), palette)
 	if err != nil {
 		return ansi.Theme{}, ansi.Theme{}, err
 	}
-	errOut, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, os.Stderr, os.Getenv), cfg.Colors.Palette)
+	errOut, err = ansi.NewTheme(ansi.ShouldEnable(cfgEnabled, stderr, getenv), palette)
 	if err != nil {
 		return ansi.Theme{}, ansi.Theme{}, err
 	}

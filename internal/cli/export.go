@@ -77,7 +77,7 @@ func printExportSummary(cmd *cobra.Command, theme ansi.Theme, results []legacy.E
 				fmt.Sprintf(", %d discarded (see warning above)", len(r.Discarded)))
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s entries written%s\n",
-			theme.Wrap(ansi.RoleSuccess, "export"), r.Host,
+			theme.Wrap(ansi.RoleSuccess, "export"), theme.Wrap(ansi.RoleAddress, r.Host),
 			theme.Wrap(ansi.RoleValue, fmt.Sprintf("%d", r.Written)), discarded)
 	}
 }
