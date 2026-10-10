@@ -5,7 +5,7 @@
 `timesamurai` is a JSONL-backed worktime tracking tool: it tracks work, breaks, and time off
 as an append-only JSONL log per host.
 
-Current version: `v0.10.0`. Tracking, crediting/debiting, report/list/search,
+Current version: `v0.10.3`. Tracking, crediting/debiting, report/list/search,
 modify/delete/undo/edit, migrate/export/import, a legacy flag shim, and shell completions
 are all implemented and tested. Ongoing work is now maintenance and small fixes rather than
 new subsystems.
