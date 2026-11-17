@@ -39,29 +39,25 @@ func TestStartCreatesAndStopRemovesLoginMarker(t *testing.T) {
 	}
 }
 
-// A marker that drifted from the store heals on the next start/stop even
-// though the store refuses the action.
-func TestLoginMarkerHealsWhenStateAlreadyAsRequested(t *testing.T) {
+// A stale marker heals on a refused stop (nothing open), but a refused start
+// never creates one: the open session may belong to another machine.
+func TestLoginMarkerHealsOnRefusedStopOnly(t *testing.T) {
 	store := newScratchStore(t)
-	if _, err := runWork(t, store, "start"); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	if err := os.Remove(markerPath()); err != nil {
-		t.Fatal(err)
+	if _, err := runWork(t, store, "start", "--host", "someotherbox"); err != nil {
+		t.Fatalf("start --host: %v", err)
 	}
 	if _, err := runWork(t, store, "start"); err == nil {
-		t.Fatal("second start should be refused")
+		t.Fatal("start should be refused: work is open on another host")
 	}
-	if !markerExists(t, markerPath()) {
-		t.Fatal("refused start (already logged in) should restore the marker")
+	if markerExists(t, markerPath()) {
+		t.Fatal("refused start must not create the marker for a session on another host")
 	}
-	if _, err := runWork(t, store, "stop"); err != nil {
-		t.Fatalf("stop: %v", err)
+	if _, err := runWork(t, store, "stop", "--host", "someotherbox"); err != nil {
+		t.Fatalf("stop --host: %v", err)
 	}
 	writeFile(t, markerPath(), "")
-	out, err := runWork(t, store, "stop")
-	if err == nil {
-		t.Fatalf("second stop should be refused, got %q", out)
+	if out, err := runWork(t, store, "stop"); err == nil {
+		t.Fatalf("stop with nothing open should be refused, got %q", out)
 	}
 	if markerExists(t, markerPath()) {
 		t.Fatal("refused stop (not logged in) should remove the stale marker")

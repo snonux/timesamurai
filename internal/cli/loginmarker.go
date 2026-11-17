@@ -24,12 +24,13 @@ import (
 // update the marker only warns: the session entry is already persisted and
 // failing the command now would invite a retry that double-books it.
 //
-// actionErr is the start/stop outcome. Besides success, the two "state
-// already as requested" refusals also sync the marker -- ErrAlreadyLoggedIn
-// creates it, ErrNotLoggedIn removes it -- so a marker that drifted from the
-// store (crash, manual edit, the old wrapper) heals on the next start/stop
-// instead of sticking; the old fish wrapper likewise removed it
-// unconditionally. Any other error leaves the marker alone.
+// actionErr is the start/stop outcome. Besides success, a refused stop
+// (ErrNotLoggedIn: nothing is open) also removes the marker, so a stale one
+// left by a crash or the old wrapper heals on the next stop instead of
+// sticking. A refused start is deliberately NOT healed: the session that
+// blocks it may be open on another machine (login state is cross-host), and
+// creating the marker here would claim this machine is logged in. Any other
+// error leaves the marker alone.
 func syncLoginMarker(cmd *cobra.Command, rt *runtime, verb string, actionErr error) {
 	path := rt.cfg.General.LoginMarker
 	if path == "" {
@@ -38,7 +39,6 @@ func syncLoginMarker(cmd *cobra.Command, rt *runtime, verb string, actionErr err
 	login := verb == "start" || verb == "login"
 	switch {
 	case actionErr == nil:
-	case login && errors.Is(actionErr, worktime.ErrAlreadyLoggedIn):
 	case !login && errors.Is(actionErr, worktime.ErrNotLoggedIn):
 	default:
 		return

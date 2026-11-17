@@ -31,9 +31,11 @@ authoritative list of options and comments lives in the example file.
 by `general.login_marker` (default `~/.wtloggedin`); `work stop` removes it.
 Shell wrappers and prompts can test for it to tell whether you are logged in.
 Entries recorded for another machine with `--host` leave the marker alone, a
-start/stop the store refuses as redundant (already logged in / not logged in)
-still syncs the marker to the real state, and a failure to touch the marker
-only prints a warning. Set `login_marker = ""` in `config.toml` to disable it.
+stop the store refuses because nothing is open still removes a stale marker,
+the marker does not distinguish categories (starting `pet` also creates it,
+any `stop` removes it), and a failure to touch the marker only prints a
+warning. Set `login_marker = ""` in `config.toml` to disable it (an empty
+environment variable is ignored, so the env override cannot disable it).
 
 ## Precedence
 
