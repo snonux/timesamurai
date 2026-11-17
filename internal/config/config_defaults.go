@@ -47,7 +47,7 @@ func Default() Config {
 		General: GeneralConfig{
 			Hostname:          "",
 			AutoWorktimeLogin: false,
-			LoginMarker:       "~/.wtloggedin",
+			LoginMarker:       "~/.tsloggedin",
 		},
 		Report: ReportConfig{
 			Color:   true,

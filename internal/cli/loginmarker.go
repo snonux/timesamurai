@@ -13,9 +13,9 @@ import (
 )
 
 // syncLoginMarker keeps the login marker file (general.login_marker, default
-// ~/.wtloggedin) in step with a successful start/stop. The marker used to be
-// touched and removed by the fish wrappers around `work start`/`work stop`
-// (task a94); owning it here means every entry point -- the hidden
+// ~/.tsloggedin) in step with a successful start/stop. The marker (then named
+// ~/.wtloggedin) used to be touched and removed by the fish wrappers around
+// `work start`/`work stop` (task a94); owning it here means every entry point -- the hidden
 // login/logout aliases and the legacy `--login`/`--logout` shim included --
 // behaves the same, whatever shell (or none) invoked timesamurai.
 //

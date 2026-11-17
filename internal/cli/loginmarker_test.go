@@ -9,7 +9,7 @@ import (
 
 // markerPath is the default marker location under the scratch HOME that
 // newScratchStore installs.
-func markerPath() string { return filepath.Join(os.Getenv("HOME"), ".wtloggedin") }
+func markerPath() string { return filepath.Join(os.Getenv("HOME"), ".tsloggedin") }
 
 func markerExists(t *testing.T, path string) bool {
 	t.Helper()

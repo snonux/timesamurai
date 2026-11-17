@@ -700,7 +700,7 @@ func TestLoad_LoginMarker(t *testing.T) {
 		return cfg
 	}
 
-	if got, want := load().General.LoginMarker, filepath.Join(home, ".wtloggedin"); got != want {
+	if got, want := load().General.LoginMarker, filepath.Join(home, ".tsloggedin"); got != want {
 		t.Fatalf("default marker = %q, want %q", got, want)
 	}
 

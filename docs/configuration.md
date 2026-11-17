@@ -28,7 +28,7 @@ authoritative list of options and comments lives in the example file.
 ## Login marker
 
 `work start` (and its `login` alias / legacy `--login`) creates the file named
-by `general.login_marker` (default `~/.wtloggedin`); `work stop` removes it.
+by `general.login_marker` (default `~/.tsloggedin`); `work stop` removes it.
 Shell wrappers and prompts can test for it to tell whether you are logged in.
 Entries recorded for another machine with `--host` leave the marker alone, a
 stop the store refuses because nothing is open still removes a stale marker,
