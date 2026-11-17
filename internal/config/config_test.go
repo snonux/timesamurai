@@ -680,3 +680,43 @@ header = "chartreuse"
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// TestLoad_LoginMarker pins task a94's login_marker setting: a "~" default,
+// TOML override with home expansion, env override, and an explicit "" that
+// disables the marker (and survives, unlike a whitespace-only env value).
+func TestLoad_LoginMarker(t *testing.T) {
+	clearTimesamuraiEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	load := func() Config {
+		t.Helper()
+		cfg, err := Load(context.Background(), LoadOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+
+	if got, want := load().General.LoginMarker, filepath.Join(home, ".wtloggedin"); got != want {
+		t.Fatalf("default marker = %q, want %q", got, want)
+	}
+
+	writeConfig(t, dir, "[general]\nlogin_marker = \"~/.custom-marker\"\n")
+	if got, want := load().General.LoginMarker, filepath.Join(home, ".custom-marker"); got != want {
+		t.Fatalf("toml marker = %q, want %q", got, want)
+	}
+
+	t.Setenv("TIMESAMURAI_LOGIN_MARKER", "/run/marker")
+	if got := load().General.LoginMarker; got != "/run/marker" {
+		t.Fatalf("env marker = %q, want /run/marker", got)
+	}
+
+	t.Setenv("TIMESAMURAI_LOGIN_MARKER", "")
+	writeConfig(t, dir, "[general]\nlogin_marker = \"\"\n")
+	if got := load().General.LoginMarker; got != "" {
+		t.Fatalf("explicit empty marker = %q, want disabled", got)
+	}
+}

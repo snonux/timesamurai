@@ -53,6 +53,9 @@ func mergeGeneral(dst *GeneralConfig, src generalOverlay) {
 	if src.AutoWorktimeLogin != nil {
 		dst.AutoWorktimeLogin = *src.AutoWorktimeLogin
 	}
+	if src.LoginMarker != nil {
+		dst.LoginMarker = strings.TrimSpace(*src.LoginMarker)
+	}
 }
 
 func mergeReport(dst *ReportConfig, src reportOverlay) {

@@ -18,12 +18,22 @@ authoritative list of options and comments lives in the example file.
 |---|---|
 | `[storage]` | `store_dir` (JSONL store) and `db_dir` (legacy `db.*.json` / export target) |
 | `[accounting]` | Weekly hours target and tag categories (`plus_for`, `minus_for`, `buffer_for`, `weekend_days`) |
-| `[general]` | Hostname override and `auto_worktime_login` |
+| `[general]` | Hostname override, `auto_worktime_login` and `login_marker` |
 | `[report]` | Report presentation (`color`, `verbose`) |
 | `[colors]` | Per-role terminal color palette overrides (see below) |
 
 `store_dir` defaults to `db_dir` when unset in the file. Built-in defaults use
 `~/git/worktime` for `db_dir` and `~/git/worktime/timesamuraidb` for `store_dir`.
+
+## Login marker
+
+`work start` (and its `login` alias / legacy `--login`) creates the file named
+by `general.login_marker` (default `~/.wtloggedin`); `work stop` removes it.
+Shell wrappers and prompts can test for it to tell whether you are logged in.
+Entries recorded for another machine with `--host` leave the marker alone, a
+start/stop the store refuses as redundant (already logged in / not logged in)
+still syncs the marker to the real state, and a failure to touch the marker
+only prints a warning. Set `login_marker = ""` in `config.toml` to disable it.
 
 ## Precedence
 
@@ -49,6 +59,7 @@ Recognised variables (whitespace-only values are ignored):
 | `TIMESAMURAI_WEEKEND_DAYS` | `accounting.weekend_days` (comma-separated; `Mon`..`Sun`) |
 | `TIMESAMURAI_HOSTNAME` | `general.hostname` |
 | `TIMESAMURAI_AUTO_WORKTIME_LOGIN` | `general.auto_worktime_login` |
+| `TIMESAMURAI_LOGIN_MARKER` | `general.login_marker` |
 | `TIMESAMURAI_COLOR` | `report.color` |
 | `TIMESAMURAI_VERBOSE` | `report.verbose` |
 

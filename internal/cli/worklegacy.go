@@ -263,6 +263,7 @@ func runLegacySessionActions(cmd *cobra.Command, lf *legacyFlags, tags []string,
 // package does, via printEntryResult.
 func runLegacyMutation(ctx context.Context, cmd *cobra.Command, rt *runtime, verb string, tags []string, at time.Time, descr string, action sessionAction) error {
 	entry, err := action(ctx, rt.store, rt.cfg.Accounting, rt.host, tags, at, descr)
+	syncLoginMarker(cmd, rt, verb, err)
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
 	}

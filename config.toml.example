@@ -28,6 +28,9 @@ weekend_days = ["Sat", "Sun"]
 [general]
 hostname = ""                  # override the detected hostname
 auto_worktime_login = false
+# File `work start` creates and `work stop` removes, so shell prompts can tell
+# whether you are logged in. "" disables it.
+login_marker = "~/.wtloggedin"
 
 [report]
 color = true                 # master switch for all terminal colors

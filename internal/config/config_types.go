@@ -32,6 +32,12 @@ type StorageConfig struct {
 type GeneralConfig struct {
 	Hostname          string
 	AutoWorktimeLogin bool
+	// LoginMarker is the file `work start` creates and `work stop` removes
+	// so shell prompts and wrappers can cheaply tell "logged in" without
+	// parsing the store (task a94: formerly touched by the fish wrapper).
+	// "~" is expanded on load; an empty value (set explicitly) disables the
+	// marker entirely.
+	LoginMarker string
 }
 
 // ReportConfig controls report presentation.
@@ -92,6 +98,8 @@ type sectionAccounting struct {
 type sectionGeneral struct {
 	Hostname          string `toml:"hostname"`
 	AutoWorktimeLogin *bool  `toml:"auto_worktime_login"`
+	// LoginMarker is a pointer so an explicit "" (disable) differs from unset.
+	LoginMarker *string `toml:"login_marker"`
 }
 
 type sectionReport struct {
@@ -129,6 +137,7 @@ type accountingOverlay struct {
 type generalOverlay struct {
 	Hostname          *string
 	AutoWorktimeLogin *bool
+	LoginMarker       *string
 }
 
 type reportOverlay struct {
