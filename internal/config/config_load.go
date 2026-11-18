@@ -154,7 +154,7 @@ func rejectUnknownKeys(raw map[string]any) error {
 			"buffer_for": {}, "weekend_days": {},
 		},
 		"general": {
-			"hostname": {}, "auto_worktime_login": {}, "login_marker": {},
+			"hostname": {}, "auto_worktime_login": {},
 		},
 		"report": {
 			"color": {}, "verbose": {},
@@ -231,11 +231,6 @@ func applyGeneralSection(fc *fileConfig, out *overlay) {
 	if fc.General.AutoWorktimeLogin != nil {
 		out.General.AutoWorktimeLogin = fc.General.AutoWorktimeLogin
 	}
-	if fc.General.LoginMarker != nil {
-		// Trimmed but kept even when empty: "" is the documented way to
-		// switch the marker off.
-		out.General.LoginMarker = stringPtr(strings.TrimSpace(*fc.General.LoginMarker))
-	}
 }
 
 func applyReportSection(fc *fileConfig, out *overlay) {
@@ -273,13 +268,8 @@ func (c *Config) normalize() error {
 	if err != nil {
 		return fmt.Errorf("expand storage.store_dir %q: %w", c.Storage.StoreDir, err)
 	}
-	marker, err := pathutil.ExpandHome(c.General.LoginMarker)
-	if err != nil {
-		return fmt.Errorf("expand general.login_marker %q: %w", c.General.LoginMarker, err)
-	}
 	c.Storage.DBDir = dbDir
 	c.Storage.StoreDir = storeDir
-	c.General.LoginMarker = marker
 	return nil
 }
 

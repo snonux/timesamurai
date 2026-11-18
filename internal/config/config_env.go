@@ -91,13 +91,6 @@ func applyGeneralEnv(out *overlay) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	any = a || any
-	// Whitespace-only env values are ignored like every other variable, so
-	// the marker can only be disabled from config.toml, not the environment.
-	a, err = applyEnvString(&out.General.LoginMarker, "TIMESAMURAI_LOGIN_MARKER")
-	if err != nil {
-		return false, err
-	}
 	return a || any, nil
 }
 

@@ -52,7 +52,6 @@ func runSession(cmd *cobra.Command, verb string, action sessionAction, at, descr
 		return err
 	}
 	entry, err := action(cmdContext(cmd), rt.store, rt.cfg.Accounting, rt.host, tags, atTime, descr)
-	syncLoginMarker(cmd, rt, verb, err)
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
 	}

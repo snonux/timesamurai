@@ -38,11 +38,6 @@ func newScratchStore(t *testing.T) string {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TIMESAMURAI_COLOR", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	// start/stop maintain the login marker, which defaults to
-	// ~/.tsloggedin (task a94): point HOME at scratch space so no test ever
-	// creates or deletes the developer's real marker.
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("TIMESAMURAI_LOGIN_MARKER", "")
 	return t.TempDir()
 }
 
