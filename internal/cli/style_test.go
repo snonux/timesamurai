@@ -862,7 +862,7 @@ func TestExportDiscardWarningStyledLineByLine(t *testing.T) {
 // TestStreamThemesDecideEachStreamSeparately pins the stdout/stderr split:
 // a stream that is a character device gets colors while a redirected one
 // (a regular file) does not, in both directions. /dev/null stands in for a
-// terminal -- it is a character device, which is all isTerminal checks.
+// terminal -- it is a character device, which is all IsTerminal checks.
 func TestStreamThemesDecideEachStreamSeparately(t *testing.T) {
 	device, err := os.Open(os.DevNull)
 	if err != nil {

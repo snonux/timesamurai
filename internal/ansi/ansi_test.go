@@ -146,7 +146,7 @@ func clear(env map[string]string) {
 }
 
 // openCharDevice returns an open character device (os.DevNull qualifies:
-// it is a char device, which is all isTerminal checks) so the tty branch of
+// it is a char device, which is all IsTerminal checks) so the tty branch of
 // ShouldEnable can be exercised without a real terminal. Writing colors to
 // /dev/null is harmless, and the file is closed by the test.
 func openCharDevice(t *testing.T) *os.File {

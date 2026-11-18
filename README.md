@@ -44,6 +44,14 @@ completion scripts) is never colored. Roles and styles are themable via the
 variable, and colors never leak into pipes or files (see
 `docs/configuration.md`).
 
+## Work wisdoms
+
+If `work-wisdoms.md` exists in `storage.db_dir` (default
+`~/git/worktime/work-wisdoms.md`), every successful `work` action ends with
+one random line from it, picked from its `* ` bullet lines. It goes to stderr
+and only when stderr is a terminal, so piped or redirected output stays
+clean. Without the file nothing is printed.
+
 ## Build
 
 ```bash

@@ -183,11 +183,13 @@ func ShouldEnable(cfgEnabled bool, file *os.File, getenv func(string) string) bo
 	if value := getenv("CLICOLOR_FORCE"); value != "" && value != "0" {
 		return true
 	}
-	return isTerminal(file)
+	return IsTerminal(file)
 }
 
-// isTerminal reports whether file refers to a character device (a terminal).
-func isTerminal(file *os.File) bool {
+// IsTerminal reports whether file refers to a character device (a
+// terminal); nil counts as not one. Exported for the CLI's wisdom line,
+// which is only shown to a human at a terminal (see internal/cli/wisdom.go).
+func IsTerminal(file *os.File) bool {
 	if file == nil {
 		return false
 	}

@@ -42,6 +42,17 @@ func NewWorkCmd() *cobra.Command {
 		return cmd.Help()
 	}
 
+	// Every successful work action ends with a random wisdom on stderr
+	// (wisdom.go). Being a persistent hook, it covers all subcommands
+	// without each verb opting in; the one exception is a bare `work` that
+	// only printed its help, which is not an action.
+	cmd.PersistentPostRun = func(c *cobra.Command, args []string) {
+		if c == cmd && !legacyActionRequested(legacy) {
+			return
+		}
+		printWisdomAfterAction(c)
+	}
+
 	cmd.AddCommand(
 		newSessionCmd("start", "Open a work session", false, "start", worktime.Start),
 		newSessionCmd("login", "", true, "start", worktime.Start),
